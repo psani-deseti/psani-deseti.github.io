@@ -56,6 +56,14 @@ export const Keyboard: React.FC<KeyboardProps> = ({ activeChar, showAllColors = 
 
   const isShiftActive = isUpper;
 
+  const learnedFingers = new Set<number>();
+  if (learnedLetters) {
+    learnedLetters.forEach(letter => {
+      const finger = keyFingerMap[letter.toLowerCase()];
+      if (finger) learnedFingers.add(finger);
+    });
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {showAllColors && !learnedLetters && (
@@ -75,8 +83,11 @@ export const Keyboard: React.FC<KeyboardProps> = ({ activeChar, showAllColors = 
         <div key={rowIndex} className="flex justify-center gap-1.5 min-w-max">
           {row.map((key) => {
             const displayKey = key === 'ShiftLeft' || key === 'ShiftRight' ? 'Shift' : key === 'CtrlRight' ? 'Ctrl' : key;
+            const isSpecialKey = key.length > 1;
+            const isLearnedKey = learnedLetters ? learnedLetters.has(key.toLowerCase()) : false;
             let isKeyActive = false;
-            if (key === 'Space' && activeChar === ' ') isKeyActive = true;
+            if (learnedLetters && isLearnedKey && !isSpecialKey) isKeyActive = true;
+            else if (key === 'Space' && activeChar === ' ') isKeyActive = true;
             else if (key === 'ShiftLeft' && isShiftActive && keyFingerMap[lowerChar] >= 5) isKeyActive = true;
             else if (key === 'ShiftRight' && isShiftActive && keyFingerMap[lowerChar] <= 4) isKeyActive = true;
             else if (key.length === 1 && key.toLowerCase() === lowerChar) isKeyActive = true;
@@ -89,7 +100,6 @@ export const Keyboard: React.FC<KeyboardProps> = ({ activeChar, showAllColors = 
             const baseClasses = "flex items-center justify-center rounded-xl font-mono text-sm font-extrabold transition-all duration-100 border-2";
             
             const isLearned = learnedLetters ? learnedLetters.has(key.toLowerCase()) : true;
-            const isSpecialKey = key.length > 1;
 
             let inactiveClasses = `bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border-slate-200 dark:border-slate-600 border-b-4`;
             if (showAllColors) {
@@ -128,39 +138,51 @@ export const Keyboard: React.FC<KeyboardProps> = ({ activeChar, showAllColors = 
       
       {/* Hand indicators */}
       <div className="flex justify-center gap-16 mt-8">
-        <Hand isLeft activeFinger={showAllColors ? null : (isShiftActive && keyFingerMap[lowerChar] >= 5 ? 1 : (keyFingerMap[lowerChar] <= 4 ? keyFingerMap[lowerChar] : (activeChar === ' ' ? 9 : null)))} showAllColors={showAllColors} />
-        <Hand isLeft={false} activeFinger={showAllColors ? null : (isShiftActive && keyFingerMap[lowerChar] <= 4 ? 8 : (keyFingerMap[lowerChar] >= 5 && keyFingerMap[lowerChar] <= 8 ? keyFingerMap[lowerChar] : (activeChar === ' ' ? 9 : null)))} showAllColors={showAllColors} />
+        <Hand
+          isLeft
+          activeFinger={showAllColors ? null : (isShiftActive && keyFingerMap[lowerChar] >= 5 ? 1 : (keyFingerMap[lowerChar] <= 4 ? keyFingerMap[lowerChar] : (activeChar === ' ' ? 9 : null)))}
+          activeFingers={learnedFingers}
+          showAllColors={showAllColors}
+        />
+        <Hand
+          isLeft={false}
+          activeFinger={showAllColors ? null : (isShiftActive && keyFingerMap[lowerChar] <= 4 ? 8 : (keyFingerMap[lowerChar] >= 5 && keyFingerMap[lowerChar] <= 8 ? keyFingerMap[lowerChar] : (activeChar === ' ' ? 9 : null)))}
+          activeFingers={learnedFingers}
+          showAllColors={showAllColors}
+        />
       </div>
     </div>
     </div>
   );
 };
 
-const Hand: React.FC<{ isLeft: boolean; activeFinger: number | null; showAllColors?: boolean }> = ({ isLeft, activeFinger, showAllColors }) => {
+const Hand: React.FC<{ isLeft: boolean; activeFinger: number | null; activeFingers?: Set<number>; showAllColors?: boolean }> = ({ isLeft, activeFinger, activeFingers, showAllColors }) => {
   const fingers = isLeft ? [1, 2, 3, 4, 9] : [9, 5, 6, 7, 8];
   
   return (
     <div className="flex items-end gap-1 h-24">
       {fingers.map((f) => {
-        const isActive = showAllColors || activeFinger === f;
         let height = 'h-16';
         if (f === 3 || f === 6) height = 'h-24';
         else if (f === 2 || f === 7 || f === 4 || f === 5) height = 'h-20';
         else if (f === 9) height = 'h-12';
 
         let width = f === 9 ? 'w-8' : 'w-6';
-        const color = isActive ? fingerColors[f] : 'bg-slate-200 dark:bg-slate-600';
-        const border = isActive ? fingerBorders[f] : 'border-slate-300 dark:border-slate-500';
         
         let transform = '';
         if (f === 9) {
           transform = isLeft ? 'ml-4 rotate-[30deg] origin-bottom-left' : 'mr-4 -rotate-[30deg] origin-bottom-right';
         }
         
+        const isLearntActive = activeFingers ? activeFingers.has(f) : false;
+        const isActive = showAllColors || activeFinger === f || isLearntActive;
+        const color = isActive ? fingerColors[f] : 'bg-slate-200 dark:bg-slate-600';
+        const borderColor = isActive ? fingerBorders[f] : 'border-slate-300 dark:border-slate-500';
+
         return (
           <div
             key={f}
-            className={`${width} ${height} ${color} rounded-t-full border-2 ${border} transition-colors duration-200 ${transform}`}
+            className={`${width} ${height} ${color} rounded-t-full border-2 ${borderColor} transition-colors duration-200 ${transform}`}
           />
         );
       })}

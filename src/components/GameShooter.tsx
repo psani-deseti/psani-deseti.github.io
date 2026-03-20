@@ -8,6 +8,7 @@ interface GameShooterProps {
   settings: Settings;
   onComplete: (stats: GameStats) => void;
   onCancel?: () => void;
+  setIsWriting: (isWriting: boolean) => void;
 }
 
 interface Enemy {
@@ -18,7 +19,11 @@ interface Enemy {
   speed: number;
 }
 
-export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onComplete, onCancel }) => {
+export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onComplete, onCancel, setIsWriting }) => {
+  const isInfinite = lesson.mode === 'infinite';
+  const difficulty = lesson.infiniteDifficulty || 'medium';
+  const progressive = lesson.infiniteProgressive ?? true;
+  const infiniteDurationSec = lesson.infiniteDurationSec ?? 120;
   const [gameState, setGameState] = useState<'waiting' | 'playing' | 'finished'>('waiting');
   const [enemies, setEnemies] = useState<Enemy[]>([]);
   const [score, setScore] = useState(0);
@@ -35,7 +40,8 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
   const scoreRef = useRef(0);
   const errorsRef = useRef(0);
 
-  const targetScore = 30; // Increased target score
+  const targetScore = isInfinite ? Infinity : 30; // Infinite mode has no target score
+  const gameDuration = isInfinite && infiniteDurationSec !== null ? infiniteDurationSec * 1000 : null;
 
   const triggerShake = () => {
     setShake(true);
@@ -47,9 +53,21 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
     errorsRef.current = errors;
   }, [score, errors]);
 
+  const finishGame = useCallback((finalScore = scoreRef.current, finalErrors = errorsRef.current) => {
+    setGameState('finished');
+    setIsWriting(false);
+    const endTime = Date.now();
+    const timeMs = endTime - (startTime || endTime);
+    const minutes = Math.max(timeMs / 60000, 1 / 60000);
+    const wpm = Math.round(finalScore / minutes);
+    const accuracy = Math.max(0, Math.round((finalScore / (finalScore + finalErrors)) * 100)) || 100;
+    onComplete({ wpm, accuracy, errors: finalErrors, timeMs });
+  }, [onComplete, setIsWriting, startTime]);
+
   const startGame = () => {
     setGameState('playing');
     setStartTime(Date.now());
+    setIsWriting(true);
     setEnemies([]);
     enemiesRef.current = [];
     setScore(0);
@@ -58,6 +76,16 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
     enemyIdCounter.current = 0;
     if (containerRef.current) containerRef.current.focus();
   };
+
+  // Handle infinite mode timer
+  useEffect(() => {
+    if (isInfinite && gameState === 'playing' && gameDuration && startTime) {
+      const timer = setTimeout(() => {
+        finishGame();
+      }, gameDuration);
+      return () => clearTimeout(timer);
+    }
+  }, [finishGame, gameDuration, gameState, isInfinite, startTime]);
 
   const update = useCallback((time: number) => {
     if (gameState !== 'playing') return;
@@ -153,13 +181,7 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
       setScore(newScore);
       
       if (newScore >= targetScore) {
-        setGameState('finished');
-        const endTime = Date.now();
-        const timeMs = endTime - (startTime || endTime);
-        const minutes = timeMs / 60000;
-        const wpm = minutes > 0 ? Math.round(newScore / minutes) : 0;
-        const accuracy = Math.max(0, Math.round((newScore / (newScore + errors)) * 100)) || 100;
-        onComplete({ wpm, accuracy, errors, timeMs });
+        finishGame(newScore, errorsRef.current);
       }
     } else {
       setErrors(err => err + 1);
@@ -183,13 +205,20 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
           <div>
             <h2 className="font-black text-slate-800 dark:text-white">{lesson.title}</h2>
             <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Střílečka</div>
+            {isInfinite && (
+              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                {infiniteDurationSec === null ? 'Infinite rezim' : `${infiniteDurationSec}s`}
+              </div>
+            )}
           </div>
         </div>
         
         <div className="flex gap-4">
           <div className="bg-white dark:bg-slate-800 px-4 py-2 rounded-xl border-2 border-slate-200 dark:border-slate-700 border-b-4 flex items-center gap-3">
             <Target className="w-5 h-5 text-blue-500" />
-            <span className="font-black text-slate-700 dark:text-slate-200">{score}/{targetScore}</span>
+            <span className="font-black text-slate-700 dark:text-slate-200">
+              {isInfinite ? score : `${score}/${targetScore}`}
+            </span>
           </div>
           <div className="bg-white dark:bg-slate-800 px-4 py-2 rounded-xl border-2 border-slate-200 dark:border-slate-700 border-b-4 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-rose-500" />
@@ -197,7 +226,11 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
           </div>
           <div className="bg-white dark:bg-slate-800 px-4 py-2 rounded-xl border-2 border-slate-200 dark:border-slate-700 border-b-4 flex items-center gap-3">
             <Timer className="w-5 h-5 text-slate-400" />
-            <span className="font-black text-slate-700 dark:text-slate-200 font-mono">{Math.floor(timeElapsed / 1000)}s</span>
+            <span className="font-black text-slate-700 dark:text-slate-200 font-mono">
+              {isInfinite && gameDuration && startTime 
+                ? `${Math.max(0, Math.floor((gameDuration - (Date.now() - startTime)) / 1000))}s` 
+                : `${Math.floor(timeElapsed / 1000)}s`}
+            </span>
           </div>
         </div>
       </div>
@@ -228,7 +261,10 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
                 </div>
                 <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-2">Připraveni?</h3>
                 <p className="text-slate-500 dark:text-slate-400 mb-8">
-                  Sestřelte {targetScore} písmen dříve, než dopadnou na zem. Hra se bude postupně zrychlovat!
+                  {isInfinite 
+                    ? 'Sestřelte co nejvíce písmen během 2 minut. Hra se bude postupně zrychlovat!' 
+                    : `Sestřelte ${targetScore} písmen dříve, než dopadnou na zem. Hra se bude postupně zrychlovat!`
+                  }
                 </p>
                 <button
                   onClick={startGame}
@@ -263,10 +299,10 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
 
       <div className="mt-8 flex justify-center">
         <button
-          onClick={onCancel}
+          onClick={isInfinite && gameState === 'playing' ? () => finishGame() : onCancel}
           className="px-6 py-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-bold transition-colors"
         >
-          Zrušit hru
+          {isInfinite && gameState === 'playing' ? 'Skončit' : 'Zrušit hru'}
         </button>
       </div>
     </div>

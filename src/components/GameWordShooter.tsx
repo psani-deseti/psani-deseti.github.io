@@ -8,6 +8,7 @@ interface GameWordShooterProps {
   settings: Settings;
   onComplete: (stats: GameStats) => void;
   onCancel?: () => void;
+  setIsWriting: (isWriting: boolean) => void;
 }
 
 interface WordEnemy {
@@ -19,7 +20,7 @@ interface WordEnemy {
   speed: number;
 }
 
-export const GameWordShooter: React.FC<GameWordShooterProps> = ({ lesson, settings, onComplete, onCancel }) => {
+export const GameWordShooter: React.FC<GameWordShooterProps> = ({ lesson, settings, onComplete, onCancel, setIsWriting }) => {
   const [gameState, setGameState] = useState<'waiting' | 'playing' | 'finished'>('waiting');
   const [enemies, setEnemies] = useState<WordEnemy[]>([]);
   const [score, setScore] = useState(0);
@@ -54,6 +55,7 @@ export const GameWordShooter: React.FC<GameWordShooterProps> = ({ lesson, settin
   const startGame = () => {
     setGameState('playing');
     setStartTime(Date.now());
+    setIsWriting(true);
     setEnemies([]);
     enemiesRef.current = [];
     setScore(0);
@@ -165,6 +167,7 @@ export const GameWordShooter: React.FC<GameWordShooterProps> = ({ lesson, settin
             
             if (newScore >= targetScore) {
               setGameState('finished');
+              setIsWriting(false);
               const endTime = Date.now();
               const timeMs = endTime - (startTime || endTime);
               const minutes = timeMs / 60000;

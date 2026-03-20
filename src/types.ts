@@ -1,4 +1,4 @@
-export type GameMode = 'standard' | 'shooter' | 'wordShooter' | 'random' | 'challenge';
+export type GameMode = 'standard' | 'shooter' | 'wordShooter' | 'random' | 'challenge' | 'infinite';
 export type ShooterDifficulty = 'easy' | 'medium' | 'hard';
 
 export interface Settings {
@@ -31,6 +31,10 @@ export interface SubLesson {
   pages?: string[]; // For multi-page exercises
   challengeParts?: ('standard' | 'shooter' | 'wordShooter')[]; // Modes included in challenge
   newLetters?: string; // New letters introduced in this lesson
+  infiniteMode?: 'standard' | 'shooter'; // Mode for infinite: writing or shooting
+  infiniteDifficulty?: 'easy' | 'medium' | 'hard'; // Difficulty level for infinite
+  infiniteProgressive?: boolean; // Whether difficulty increases over time
+  infiniteDurationSec?: number | null; // Time limit for infinite mode, null = no limit
 }
 
 export interface Category {

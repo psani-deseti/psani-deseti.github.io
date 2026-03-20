@@ -10,6 +10,7 @@ interface GameStandardProps {
   settings: Settings;
   onComplete: (stats: GameStats) => void;
   onCancel?: () => void;
+  setIsWriting: (isWriting: boolean) => void;
 }
 
 const FINGER_MAP: Record<string, { hand: 'left' | 'right', finger: string, color: string }> = {
@@ -70,11 +71,17 @@ const FINGER_MAP: Record<string, { hand: 'left' | 'right', finger: string, color
   'ˇ': { hand: 'right', finger: 'malíček', color: 'bg-red-400' },
 };
 
-export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, onComplete, onCancel }) => {
+export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, onComplete, onCancel, setIsWriting }) => {
+  const isInfinite = lesson.mode === 'infinite';
+  const difficulty = lesson.infiniteDifficulty || 'medium';
+  const progressive = lesson.infiniteProgressive ?? true;
+  const infiniteDurationSec = lesson.infiniteDurationSec ?? 120;
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [showFingerGuide, setShowFingerGuide] = useState(!!lesson.newLetters);
   
   const pages = useMemo(() => {
+    const normalize = (text: string) => text.replace(/^[\s\u00A0]+/, '');
+
     if (lesson.mode === 'random' && (lesson.letters || lesson.words)) {
       const generatedPages = [];
       const count = lesson.pageCount || 3;
@@ -84,23 +91,62 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
 
       for (let i = 0; i < count; i++) {
         if (lesson.words && lesson.words.length > 0) {
-          // If wordCount is specified, use it. Otherwise use baseWordCount
-          generatedPages.push(generateRandomWords(lesson.words, baseWordCount));
+          generatedPages.push(normalize(generateRandomWords(lesson.words, baseWordCount)));
         } else if (lesson.letters) {
-          // If pageLength is specified, use it for all pages. Otherwise increase it.
           const pageLength = lesson.pageLength ? baseLength : (baseLength + i * 20);
-          // If max_comb is specified, use it. Otherwise increase it.
           const pageMaxComb = lesson.max_comb ? baseMaxComb : (baseMaxComb + i);
-          generatedPages.push(generateRandomText(lesson.letters, pageLength, pageMaxComb));
+          generatedPages.push(normalize(generateRandomText(lesson.letters, pageLength, pageMaxComb)));
         }
       }
       return generatedPages;
     }
     if (lesson.pages && lesson.pages.length > 0) {
-      return lesson.pages;
+      return lesson.pages.map(normalize);
     }
-    return [lesson.text || ''];
+    return [normalize(lesson.text || '')];
   }, [lesson]);
+
+  const [infiniteStage, setInfiniteStage] = useState(0);
+
+  const infiniteText = useMemo(() => {
+    if (!isInfinite) return '';
+    const letters = (lesson.letters || 'abcdefghijklmnopqrstuvwxyz').replace(/\s+/g, '') || 'abcdefghijklmnopqrstuvwxyz';
+    const difficultyFactor = difficulty === 'easy' ? 0.5 : difficulty === 'hard' ? 1.5 : 1;
+    const baseLength = 50;
+    const stageFactor = progressive ? (1 + infiniteStage * 0.2) : 1;
+    const targetLength = Math.floor(baseLength * difficultyFactor * stageFactor);
+    
+    let result = '';
+    let previousWasSpace = true;
+    for (let i = 0; i < targetLength; i++) {
+      const remaining = targetLength - i;
+      const shouldInsertSpace = !previousWasSpace && i > 1 && remaining > 2 && Math.random() < 0.14;
+
+      if (shouldInsertSpace) {
+        result += ' ';
+        previousWasSpace = true;
+        continue;
+      }
+
+      result += letters[Math.floor(Math.random() * letters.length)];
+      previousWasSpace = false;
+    }
+    return result.replace(/\s+/g, ' ').trim();
+  }, [isInfinite, infiniteStage, lesson.letters, difficulty, progressive]);
+
+  useEffect(() => {
+    if (isInfinite) {
+      setInfiniteStage(0);
+      setCurrentPageIndex(0);
+      setInput('');
+      setErrors(0);
+      setIsFinished(false);
+      setStartTime(null);
+      setTimeElapsed(0);
+      totalTypedCharsRef.current = 0;
+      totalErrorsRef.current = 0;
+    }
+  }, [isInfinite, lesson.id]);
 
   const [input, setInput] = useState('');
   const [startTime, setStartTime] = useState<number | null>(null);
@@ -109,8 +155,10 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
   const [timeElapsed, setTimeElapsed] = useState(0);
   const [shake, setShake] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const totalTypedCharsRef = useRef(0);
+  const totalErrorsRef = useRef(0);
 
-  const targetText = pages[currentPageIndex] || '';
+  const targetText = (isInfinite ? infiniteText : pages[currentPageIndex]) || '';
   const currentIndex = input.length;
   const activeChar = targetText[currentIndex] || '';
 
@@ -130,8 +178,53 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
     return () => clearInterval(interval);
   }, [startTime, isFinished]);
 
-  const completeGame = (finalErrors: number) => {
+  const buildInfiniteStats = useCallback((completedChars: number, totalErrors: number) => {
+    const endTime = Date.now();
+    const timeMs = endTime - (startTime || endTime);
+    const minutes = Math.max(timeMs / 60000, 1 / 60000);
+    const words = completedChars / 5;
+    const attempts = completedChars + totalErrors;
+    const wpm = Math.round(words / minutes);
+    const accuracy = attempts > 0 ? Math.max(0, Math.round((completedChars / attempts) * 100)) : 100;
+
+    return { wpm, accuracy, errors: totalErrors, timeMs };
+  }, [startTime]);
+
+  const finishInfiniteRun = useCallback(() => {
     setIsFinished(true);
+    setIsWriting(false);
+
+    const completedChars = totalTypedCharsRef.current + input.length;
+    const totalErrors = totalErrorsRef.current + errors;
+    onComplete(buildInfiniteStats(completedChars, totalErrors));
+  }, [buildInfiniteStats, errors, input.length, onComplete, setIsWriting]);
+
+  useEffect(() => {
+    if (!isInfinite || infiniteDurationSec === null || !startTime || isFinished) return;
+
+    const remainingMs = infiniteDurationSec * 1000 - (Date.now() - startTime);
+    if (remainingMs <= 0) {
+      finishInfiniteRun();
+      return;
+    }
+
+    const timeout = window.setTimeout(finishInfiniteRun, remainingMs);
+    return () => clearTimeout(timeout);
+  }, [finishInfiniteRun, infiniteDurationSec, isFinished, isInfinite, startTime]);
+
+  const completeGame = (finalErrors: number) => {
+    if (isInfinite) {
+      totalTypedCharsRef.current += targetText.length;
+      totalErrorsRef.current += finalErrors;
+      setInfiniteStage(prev => prev + 1);
+      setInput('');
+      setErrors(0);
+      setShake(false);
+      return;
+    }
+
+    setIsFinished(true);
+    setIsWriting(false);
     const endTime = Date.now();
     const timeMs = endTime - (startTime || endTime);
     const minutes = timeMs / 60000;
@@ -170,6 +263,7 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
 
     if (!startTime) {
       setStartTime(Date.now());
+      setIsWriting(true);
     }
 
     if (e.key === 'Backspace') {
@@ -187,7 +281,9 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
       setShake(false);
       
       if (newInput.length === targetText.length) {
-        if (currentPageIndex < pages.length - 1) {
+        if (isInfinite) {
+          completeGame(errors);
+        } else if (currentPageIndex < pages.length - 1) {
           setTimeout(() => {
             setCurrentPageIndex(prev => prev + 1);
             setInput('');
@@ -207,7 +303,9 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
         setInput(newInput);
         
         if (newInput.length === targetText.length) {
-          if (currentPageIndex < pages.length - 1) {
+          if (isInfinite) {
+            completeGame(newErrors);
+          } else if (currentPageIndex < pages.length - 1) {
             setTimeout(() => {
               setCurrentPageIndex(prev => prev + 1);
               setInput('');
@@ -229,12 +327,9 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-white dark:bg-slate-800 p-8 rounded-3xl border-2 border-slate-200 dark:border-slate-700 border-b-8 text-center"
+            className="bg-white dark:bg-slate-800 p-4 rounded-3xl border-2 border-slate-200 dark:border-slate-700 border-b-8 text-center"
           >
-            <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <Info className="w-10 h-10" />
-            </div>
-            <h2 className="text-3xl font-black text-slate-800 dark:text-white mb-4">Nová písmena!</h2>
+            <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-4">Nová písmena!</h2>
             <p className="text-slate-600 dark:text-slate-400 mb-8 text-lg">
               V této lekci se naučíme: <span className="font-bold text-blue-500">{lesson.newLetters}</span>
             </p>
@@ -256,15 +351,18 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
               })}
             </div>
 
-            <div className="mb-8 opacity-50 scale-75 origin-center">
-              <Keyboard activeChar={lesson.newLetters?.[0] || ''} showAllColors />
+            <div className="mb-6 opacity-50 scale-75 origin-center">
+              <Keyboard 
+                activeChar={lesson.newLetters?.[0] || ''} 
+                learnedLetters={new Set((lesson.newLetters || '').toLowerCase().split(''))}
+              />
             </div>
 
             <button
               onClick={() => setShowFingerGuide(false)}
               className="px-8 py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl font-black text-xl shadow-lg shadow-blue-500/25 transition-all active:scale-95 flex items-center justify-center gap-3"
             >
-              <span>Rozumím, jdeme na to</span>
+              <span>Jdeme na to</span>
               <ArrowRight className="w-6 h-6" />
             </button>
           </motion.div>
@@ -284,15 +382,17 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
                 <div>
                   <h2 className="font-black text-slate-800 dark:text-white">{lesson.title}</h2>
                   <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    Strana {currentPageIndex + 1} z {pages.length}
+                    {isInfinite
+                      ? (infiniteDurationSec === null ? 'Infinite rezim' : `${Math.max(0, Math.ceil((infiniteDurationSec * 1000 - timeElapsed) / 1000))} s`)
+                      : `Strana ${currentPageIndex + 1} z ${pages.length}`}
                   </div>
                 </div>
               </div>
               <button
-                onClick={onCancel}
+                onClick={isInfinite ? finishInfiniteRun : onCancel}
                 className="px-4 py-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-bold transition-colors"
               >
-                Zrušit
+                                {isInfinite ? 'Skončit' : 'Zrušit'}
               </button>
             </div>
 
@@ -309,9 +409,9 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
             <motion.div 
               animate={shake ? { x: [-5, 5, -5, 5, 0] } : {}}
               transition={{ duration: 0.2 }}
-              className="relative bg-white dark:bg-slate-800 p-8 sm:p-12 rounded-[2.5rem] border-2 border-slate-200 dark:border-slate-700 border-b-[12px] shadow-xl"
+              className="relative bg-white dark:bg-slate-800 p-4 sm:p-6 rounded-[2.5rem] border-2 border-slate-200 dark:border-slate-700 border-b-[12px] shadow-xl"
             >
-              <div className="flex flex-wrap gap-x-[0.15em] gap-y-4 font-mono text-2xl sm:text-3xl leading-relaxed select-none">
+              <div className="flex flex-wrap gap-x-[0.15em] gap-y-4 font-mono text-lg sm:text-xl leading-relaxed select-none">
                 {targetText.split('').map((char, i) => {
                   let colorClass = 'text-slate-300 dark:text-slate-600';
                   let bgClass = '';

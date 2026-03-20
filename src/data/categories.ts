@@ -13,8 +13,8 @@ export const categories: Category[] = [
       title: 'Rozcvička FJ',
       newLetters: 'fj',
       pages: [
-        'ffff jjjj ffff jjjj',
-        'fj fj fj fj jf jf jf jf'
+        'ffff jjjj ffff jjjj ffj jjf fjffj jjff fjf',
+        'fj fj fj fj jf jf jf jf fj fj jf jf jf jff ffj jffj fjf jjf fjf jjf'
       ]
     },
     {
@@ -22,24 +22,24 @@ export const categories: Category[] = [
       title: 'Rozcvička DK',
       newLetters: 'dk',
       pages: [
-        'dddd kkkk dddd kkkk',
-        'dk dk dk dk kd kd kd kd'
+        'dddd kkkk dddd kkkk ddk kkdd dkdd kkdk dkd',
+        'dk dk dk dk kd kd kd kd dk dk kd kd kd kdd dkk kddk dkdk kddk'
       ]
     },
     {
       id: 'fjdk-3',
       title: 'Střídání FJ DK',
       pages: [
-        'fj dk fj dk fj dk',
-        'fdjk kdjf fjdk dkfj'
+        'fj dk fj dk fj dk fj dk fj dk fj dk fff jjf jfjf',
+        'fdjk kdjf fjdk dkfj fjdk dkfj fjdk dkfj fjdk dkfj fjdk dkfj fjdk dkfj'
       ]
     },
     {
       id: 'fjdk-4',
       title: 'Trojice FJDK 1',
       pages: [
-        'fdf jkj dfd kjk',
-        'fjf dkd jfj kdk'
+        'fdf jkj dfd kjk fdfff djd kdjf',
+        'fjf dkd jfj kdk fjf dkd jfj kdk fjf dkd jfj kdk'
       ]
     },
     {
@@ -47,7 +47,6 @@ export const categories: Category[] = [
       title: 'Náhodná FJDK',
       mode: 'random',
       letters: 'fjd k',
-      newLetters: 'fjd k',
       pageCount: 4,
       pageLength: 20,
       max_comb: 2
@@ -57,8 +56,17 @@ export const categories: Category[] = [
       title: 'Malá výzva FJDK',
       mode: 'challenge',
       challengeParts: ['standard', 'shooter'],
-      text: 'fjdk fjdk dkfj kjdf fjdk',
+      text: 'fjdk fjdk dkfj kjdf fjdk fjdk fjdk dkfj kjdf fjdk jfdk fjdk dkfj',
       letters: 'fjd k'
+    },
+    {
+      id: 'fjdk-infinite',
+      title: 'Nekonečná FJDK',
+      mode: 'infinite',
+      letters: 'fjd k',
+      infiniteMode: 'standard',
+      infiniteDifficulty: 'medium',
+      infiniteProgressive: true
     }
   ]
 },
@@ -120,6 +128,15 @@ export const categories: Category[] = [
       challengeParts: ['standard', 'wordShooter'],
       text: 'sl sl ls sls lsl',
       words: ['sl', 'ls', 'slsl']
+    },
+    {
+      id: 'sl-infinite',
+      title: 'Nekonečná SL',
+      mode: 'infinite',
+      letters: 'sl',
+      infiniteMode: 'standard',
+      infiniteDifficulty: 'medium',
+      infiniteProgressive: true
     }
   ]
 },
@@ -181,6 +198,15 @@ export const categories: Category[] = [
       challengeParts: ['standard', 'shooter'],
       text: 'aů aůa ůaa aau ůaů',
       letters: 'aů'
+    },
+    {
+      id: 'au-infinite',
+      title: 'Nekonečná AŮ',
+      mode: 'infinite',
+      letters: 'aů',
+      infiniteMode: 'standard',
+      infiniteDifficulty: 'medium',
+      infiniteProgressive: true
     }
   ]
 },
@@ -242,6 +268,15 @@ export const categories: Category[] = [
       challengeParts: ['standard', 'wordShooter'],
       text: 'gh ghh hgg ghg hgh',
       words: ['gh', 'hg', 'ghgh']
+    },
+    {
+      id: 'gh-infinite',
+      title: 'Nekonečná GH',
+      mode: 'infinite',
+      letters: 'gh',
+      infiniteMode: 'standard',
+      infiniteDifficulty: 'medium',
+      infiniteProgressive: true
     }
   ]
 },
@@ -303,6 +338,15 @@ export const categories: Category[] = [
       challengeParts: ['standard', 'shooter'],
       text: 'ru ruu urr ruru urur',
       letters: 'ru'
+    },
+    {
+      id: 'ru-infinite',
+      title: 'Nekonečná RU',
+      mode: 'infinite',
+      letters: 'ru',
+      infiniteMode: 'standard',
+      infiniteDifficulty: 'medium',
+      infiniteProgressive: true
     }
   ]
 },
@@ -364,6 +408,15 @@ export const categories: Category[] = [
       challengeParts: ['standard', 'wordShooter'],
       text: 'ei ie eie iei ei',
       words: ['ei', 'ie', 'eiei']
+    },
+    {
+      id: 'ei-infinite',
+      title: 'Nekonečná EI',
+      mode: 'infinite',
+      letters: 'ei',
+      infiniteMode: 'standard',
+      infiniteDifficulty: 'medium',
+      infiniteProgressive: true
     }
   ]
 }

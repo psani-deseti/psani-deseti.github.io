@@ -11,11 +11,12 @@ interface GameChallengeProps {
   settings: Settings;
   onComplete: (stats: GameStats) => void;
   onCancel?: () => void;
+  setIsWriting: (isWriting: boolean) => void;
 }
 
 type ChallengeMode = 'standard' | 'shooter' | 'wordShooter';
 
-export const GameChallenge: React.FC<GameChallengeProps> = ({ lesson, settings, onComplete, onCancel }) => {
+export const GameChallenge: React.FC<GameChallengeProps> = ({ lesson, settings, onComplete, onCancel, setIsWriting }) => {
   const parts = useMemo(() => lesson.challengeParts || ['standard', 'shooter'], [lesson.challengeParts]);
   const [activeTab, setActiveTab] = useState<ChallengeMode>(parts[0]);
   const [partStats, setPartStats] = useState<Record<string, GameStats | null>>({});
@@ -151,6 +152,7 @@ export const GameChallenge: React.FC<GameChallengeProps> = ({ lesson, settings, 
                   settings={settings} 
                   onComplete={(stats) => handlePartComplete('standard', stats)} 
                   onCancel={onCancel}
+                  setIsWriting={setIsWriting}
                 />
               )}
               {activeTab === 'shooter' && (
@@ -159,6 +161,7 @@ export const GameChallenge: React.FC<GameChallengeProps> = ({ lesson, settings, 
                   settings={settings} 
                   onComplete={(stats) => handlePartComplete('shooter', stats)} 
                   onCancel={onCancel}
+                  setIsWriting={setIsWriting}
                 />
               )}
               {activeTab === 'wordShooter' && (
@@ -167,6 +170,7 @@ export const GameChallenge: React.FC<GameChallengeProps> = ({ lesson, settings, 
                   settings={settings} 
                   onComplete={(stats) => handlePartComplete('wordShooter', stats)} 
                   onCancel={onCancel}
+                  setIsWriting={setIsWriting}
                 />
               )}
             </>

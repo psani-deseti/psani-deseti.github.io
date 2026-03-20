@@ -7,7 +7,8 @@ import { GameShooter } from './components/GameShooter';
 import { GameWordShooter } from './components/GameWordShooter';
 import { GameChallenge } from './components/GameChallenge';
 import { Keyboard } from './components/Keyboard';
-import { Settings as SettingsIcon, Play, Target, Clock, Trophy, ArrowLeft, RotateCcw, Map as MapIcon, Dumbbell, Star, X, CheckCircle2, HelpCircle, ArrowRight } from 'lucide-react';
+import { VerticalTimer } from './components/VerticalTimer';
+import { Settings as SettingsIcon, Play, Target, Clock, Trophy, ArrowLeft, RotateCcw, Map as MapIcon, Dumbbell, Star, X, CheckCircle2, HelpCircle, ArrowRight, Keyboard as KeyboardIcon, TrendingUp } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -15,6 +16,14 @@ type Screen = 'menu' | 'game' | 'evaluation';
 type Tab = 'path' | 'practice';
 
 export default function App() {
+  type InfiniteRunSummary = GameStats & {
+    playedAt: string;
+    mode: 'standard' | 'shooter';
+    difficulty: 'easy' | 'medium' | 'hard';
+    progressive: boolean;
+    durationSec: number | null;
+  };
+
   const [screen, setScreen] = useState<Screen>('menu');
   const [currentTab, setCurrentTab] = useState<Tab>('path');
   const [selectedLesson, setSelectedLesson] = useState<SubLesson>(categories[0].subLessons[0]);
@@ -22,6 +31,13 @@ export default function App() {
   const [stats, setStats] = useState<GameStats | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [lastCompletedLessonId, setLastCompletedLessonId] = useState<string | null>(null);
+  const [isWriting, setIsWriting] = useState(false);
+  const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
+  const [lessonInfiniteSettings, setLessonInfiniteSettings] = useState<Record<string, { mode: 'standard' | 'shooter'; difficulty: 'easy' | 'medium' | 'hard'; progressive: boolean; durationSec: number | null }>>({});
+  const [infiniteResults, setInfiniteResults] = useState<Record<string, InfiniteRunSummary>>(() => {
+    const saved = localStorage.getItem('ninjaInfiniteResults');
+    return saved ? JSON.parse(saved) : {};
+  });
   
   const [settings, setSettings] = useState<Settings>(() => {
     const saved = localStorage.getItem('ninjaSettings');
@@ -43,6 +59,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
+  const [infiniteDifficulty, setInfiniteDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const pathContainerRef = React.useRef<HTMLDivElement>(null);
 
   const learnedLetters = React.useMemo(() => {
@@ -91,6 +108,10 @@ export default function App() {
     localStorage.setItem('ninjaProgress', JSON.stringify(completedLessons));
   }, [completedLessons]);
 
+  useEffect(() => {
+    localStorage.setItem('ninjaInfiniteResults', JSON.stringify(infiniteResults));
+  }, [infiniteResults]);
+
   const startGame = () => {
     setScreen('game');
   };
@@ -130,8 +151,26 @@ export default function App() {
     setStats(gameStats);
     setScreen('evaluation');
     setLastCompletedLessonId(selectedLesson.id.toString());
-    
-    if (!completedLessons.includes(selectedLesson.id.toString())) {
+
+    if (selectedLesson.mode === 'infinite') {
+      const originalLessonId = selectedLesson.id.toString().startsWith('infinite-')
+        ? selectedLesson.id.toString().slice('infinite-'.length)
+        : selectedLesson.id.toString();
+
+      setInfiniteResults(prev => ({
+        ...prev,
+        [originalLessonId]: {
+          ...gameStats,
+          playedAt: new Date().toISOString(),
+          mode: selectedLesson.infiniteMode || 'standard',
+          difficulty: selectedLesson.infiniteDifficulty || 'medium',
+          progressive: selectedLesson.infiniteProgressive ?? true,
+          durationSec: selectedLesson.infiniteDurationSec ?? 120
+        }
+      }));
+    }
+
+    if (selectedLesson.mode !== 'infinite' && !completedLessons.includes(selectedLesson.id.toString())) {
       setCompletedLessons([...completedLessons, selectedLesson.id.toString()]);
     }
 
@@ -213,6 +252,15 @@ export default function App() {
     return null;
   }, [selectedLesson]);
 
+  const selectedCategoryLessons = selectedCategory?.subLessons.filter(lesson => lesson.mode !== 'infinite') || [];
+  const selectedCategoryInfiniteLessons = selectedCategory?.subLessons.filter(lesson => lesson.mode === 'infinite') || [];
+  const formatInfiniteDuration = (durationSec: number | null | undefined) => {
+    if (durationSec == null) return 'Infinite';
+    if (durationSec < 60) return `${durationSec}s`;
+    const minutes = durationSec / 60;
+    return Number.isInteger(minutes) ? `${minutes} min` : `${durationSec}s`;
+  };
+
   const handleNextLesson = () => {
     if (nextLesson) {
       setSelectedLesson(nextLesson);
@@ -257,16 +305,32 @@ export default function App() {
   };
 
   const renderGame = () => {
+    const props = {
+      lesson: selectedLesson,
+      settings: settings,
+      onComplete: handleGameComplete,
+      onCancel: handleCancel,
+      setIsWriting: setIsWriting,
+    };
+    
+    if (selectedMode === 'infinite') {
+      if (selectedLesson.infiniteMode === 'shooter') {
+        return <GameShooter {...props} />;
+      } else {
+        return <GameStandard {...props} />;
+      }
+    }
+    
     switch (selectedMode) {
       case 'standard':
       case 'random':
-        return <GameStandard lesson={selectedLesson} settings={settings} onComplete={handleGameComplete} onCancel={handleCancel} />;
+        return <GameStandard {...props} />;
       case 'shooter':
-        return <GameShooter lesson={selectedLesson} settings={settings} onComplete={handleGameComplete} onCancel={handleCancel} />;
+        return <GameShooter {...props} />;
       case 'wordShooter':
-        return <GameWordShooter lesson={selectedLesson} settings={settings} onComplete={handleGameComplete} onCancel={handleCancel} />;
+        return <GameWordShooter {...props} />;
       case 'challenge':
-        return <GameChallenge lesson={selectedLesson} settings={settings} onComplete={handleGameComplete} onCancel={handleCancel} />;
+        return <GameChallenge {...props} />;
     }
   };
 
@@ -277,6 +341,7 @@ export default function App() {
 
   return (
     <div className={`min-h-screen font-sans selection:bg-blue-200 transition-colors duration-300 ${settings.darkMode ? 'dark bg-slate-900 text-slate-200' : 'bg-slate-50 text-slate-700'}`}>
+      {settings.showTimer && <VerticalTimer isWriting={isWriting} />}
       {/* Header */}
       <header className="flex justify-between items-center p-4 sm:p-6 border-b-2 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-30 transition-colors duration-300">
         <button 
@@ -333,7 +398,7 @@ export default function App() {
         )}
       </header>
 
-      <main className="p-4 sm:p-6 max-w-6xl mx-auto relative">
+      <main className="p-4 sm:p-6 max-w-4xl mx-auto relative">
         <AnimatePresence mode="wait">
           {screen === 'menu' && (
             <motion.div 
@@ -616,6 +681,51 @@ export default function App() {
                           <div className="text-sm font-medium text-slate-500 dark:text-slate-400">Sestřel padající písmena</div>
                         </div>
                       </button>
+
+                      <button
+                        onClick={() => setSelectedMode('wordShooter')}
+                        className={`p-5 rounded-3xl border-2 border-b-4 flex items-center gap-4 transition-all ${
+                          selectedMode === 'wordShooter' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0'
+                        }`}
+                      >
+                        <div className={`p-4 rounded-2xl ${selectedMode === 'wordShooter' ? 'bg-orange-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                          <Target className="w-8 h-8" />
+                        </div>
+                        <div className="text-left">
+                          <div className="font-extrabold text-xl text-slate-700 dark:text-slate-200">Word Shooter</div>
+                          <div className="text-sm font-medium text-slate-500 dark:text-slate-400">Střílej slova</div>
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => setSelectedMode('infinite')}
+                        className={`p-5 rounded-3xl border-2 border-b-4 flex items-center gap-4 transition-all ${
+                          selectedMode === 'infinite' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0'
+                        }`}
+                      >
+                        <div className={`p-4 rounded-2xl ${selectedMode === 'infinite' ? 'bg-blue-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                          <Target className="w-8 h-8" />
+                        </div>
+                        <div className="text-left">
+                          <div className="font-extrabold text-xl text-slate-700 dark:text-slate-200">Infinite</div>
+                          <div className="text-sm font-medium text-slate-500 dark:text-slate-400">Neomezená lekce (zvyšující se obtížnost)</div>
+                        </div>
+                      </button>
+                    </div>
+
+                    <div className="mt-4 p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                      <div className="text-sm font-bold text-slate-500 dark:text-slate-400 mb-2">Obtížnost (pouze infinite)</div>
+                      <div className="flex items-center gap-2">
+                        {(['easy','medium','hard'] as const).map(level => (
+                          <button
+                            key={level}
+                            onClick={() => setInfiniteDifficulty(level)}
+                            className={`flex-1 py-2 rounded-lg font-bold transition ${infiniteDifficulty === level ? 'bg-blue-500 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}
+                          >
+                            {level}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <button
@@ -843,7 +953,7 @@ export default function App() {
                 <div>
                   <h2 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100">{selectedCategory.title}</h2>
                   <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-1">
-                    {selectedCategory.subLessons.filter(l => completedLessons.includes(l.id.toString())).length} / {selectedCategory.subLessons.length}
+                    {selectedCategoryLessons.filter(l => completedLessons.includes(l.id.toString())).length} / {selectedCategoryLessons.length}
                   </p>
                 </div>
                 <button 
@@ -860,48 +970,257 @@ export default function App() {
                 </p>
                 
                 <div className="space-y-3">
-                  {selectedCategory.subLessons.map((lesson, index) => {
+                  {selectedCategoryLessons.map((lesson, index) => {
                     const isCompleted = completedLessons.includes(lesson.id.toString());
+
                     return (
-                      <button
-                        key={lesson.id}
-                        onClick={() => {
-                          setSelectedLesson(lesson);
-                          setSelectedCategory(null);
-                          setSelectedMode(lesson.mode || 'standard');
-                          startGame();
-                        }}
-                        className={`w-full p-4 rounded-2xl border-2 border-b-4 text-left transition-all flex items-center justify-between group ${
-                          isCompleted 
-                            ? 'border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40' 
-                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0'
-                        }`}
-                      >
-                        <div>
-                          <div className={`text-xs font-bold mb-1 uppercase tracking-wider ${isCompleted ? 'text-green-600 dark:text-green-400' : 'text-slate-400'}`}>
-                            Cvičení {index + 1}
+                      <div key={lesson.id} className="space-y-2">
+                        <button
+                          onClick={() => {
+                            setSelectedLesson(lesson);
+                            setSelectedCategory(null);
+                            setSelectedMode(lesson.mode || 'standard');
+                            startGame();
+                          }}
+                          className={`w-full p-4 rounded-2xl border-2 border-b-4 text-left transition-all flex items-center justify-between group ${
+                            isCompleted 
+                              ? 'border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40' 
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0'
+                          }`}
+                        >
+                          <div>
+                            <div className={`text-xs font-bold mb-1 uppercase tracking-wider ${isCompleted ? 'text-green-600 dark:text-green-400' : 'text-slate-400'}`}>
+                              Cviceni {index + 1}
+                            </div>
+                            <div className={`font-extrabold text-lg ${isCompleted ? 'text-green-800 dark:text-green-300' : 'text-slate-700 dark:text-slate-200'}`}>
+                              {lesson.title}
+                            </div>
+                            <div className="flex gap-2 mt-1">
+                              <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-slate-500">
+                                {lesson.mode === 'random' ? 'Nahodne' : lesson.mode === 'challenge' ? 'Vyzva' : lesson.mode === 'shooter' || lesson.mode === 'wordShooter' ? 'Strilecka' : 'Klasika'}
+                              </span>
+                              <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-slate-500">
+                                {lesson.mode === 'random' ? '3 strany' : lesson.mode === 'shooter' || lesson.mode === 'wordShooter' ? 'Nekonecno' : '1 strana'}
+                              </span>
+                            </div>
                           </div>
-                          <div className={`font-extrabold text-lg ${isCompleted ? 'text-green-800 dark:text-green-300' : 'text-slate-700 dark:text-slate-200'}`}>
-                            {lesson.title}
-                          </div>
-                          <div className="flex gap-2 mt-1">
-                            <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-slate-500">
-                              {lesson.mode === 'random' ? 'Náhodně' : lesson.mode === 'challenge' ? 'Výzva' : lesson.mode === 'shooter' || lesson.mode === 'wordShooter' ? 'Střílečka' : 'Klasika'}
-                            </span>
-                            <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-slate-500">
-                              {lesson.mode === 'random' ? '3 strany' : lesson.mode === 'shooter' || lesson.mode === 'wordShooter' ? 'Nekonečno' : '1 strana'}
-                            </span>
-                          </div>
-                        </div>
-                        {isCompleted ? (
-                          <CheckCircle2 className="w-6 h-6 text-green-500" />
-                        ) : (
-                          <Play className="w-6 h-6 text-slate-300 group-hover:text-blue-500 transition-colors" />
-                        )}
-                      </button>
+                          {isCompleted ? (
+                            <CheckCircle2 className="w-6 h-6 text-green-500" />
+                          ) : (
+                            <ArrowRight className="w-6 h-6 text-slate-300 group-hover:text-blue-500 transition-all" />
+                          )}
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
+
+                {selectedCategoryInfiniteLessons.length > 0 && (
+                  <div className="mt-8 pt-6 border-t-2 border-dotted border-slate-300 dark:border-slate-700 space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+                      <TrendingUp className="w-4 h-4" />
+                      Nekonečný režim
+                    </div>
+
+                    {selectedCategoryInfiniteLessons.map(lesson => {
+                      const isExpanded = expandedLessonId === lesson.id.toString();
+                      const infiniteSettings = lessonInfiniteSettings[lesson.id] || {
+                        mode: (lesson.infiniteMode as 'standard' | 'shooter') || 'standard',
+                        difficulty: (lesson.infiniteDifficulty as 'easy' | 'medium' | 'hard') || 'medium',
+                        progressive: lesson.infiniteProgressive ?? true,
+                        durationSec: lesson.infiniteDurationSec ?? 120
+                      };
+                      const lastResult = infiniteResults[lesson.id];
+
+                      return (
+                        <div key={lesson.id} className="space-y-2">
+                          <button
+                            onClick={() => setExpandedLessonId(isExpanded ? null : lesson.id.toString())}
+                            className="w-full p-4 rounded-2xl border-2 border-b-4 text-left transition-all flex items-center justify-between group border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0"
+                          >
+                            <div>
+                              <div className="text-xs font-bold mb-1 uppercase tracking-wider text-blue-500 dark:text-blue-300">
+                                Nekonecny trening
+                              </div>
+                              <div className="font-extrabold text-lg text-slate-700 dark:text-slate-100">
+                                {lesson.title}
+                              </div>
+                              <div className="flex gap-2 mt-1">
+                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-white/80 dark:bg-slate-800 rounded text-slate-500">
+                                  {formatInfiniteDuration(infiniteSettings.durationSec)}
+                                </span>
+                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-white/80 dark:bg-slate-800 rounded text-slate-500">
+                                  Ulozeny vysledek
+                                </span>
+                              </div>
+                            </div>
+                            <ArrowRight className={`w-6 h-6 text-blue-300 group-hover:text-blue-500 transition-all ${isExpanded ? 'rotate-90' : ''}`} />
+                          </button>
+
+                          
+
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4"
+                            >
+                              <div className="text-sm font-bold text-slate-600 dark:text-slate-300">Naposledy</div>
+                              {lastResult && (
+                                <div className="grid grid-cols-3 gap-3">
+                                  <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 px-4 py-3">
+                                    <div className="text-[11px] uppercase font-bold tracking-wide text-slate-400">WPM</div>
+                                    <div className="text-xl font-extrabold text-blue-500">{lastResult.wpm}</div>
+                                  </div>
+                                  <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 px-4 py-3">
+                                    <div className="text-[11px] uppercase font-bold tracking-wide text-slate-400">Presnost</div>
+                                    <div className="text-xl font-extrabold text-green-500">{lastResult.accuracy}%</div>
+                                  </div>
+                                  <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/70 px-4 py-3">
+                                    <div className="text-[11px] uppercase font-bold tracking-wide text-slate-400">Chyby</div>
+                                    <div className="text-xl font-extrabold text-amber-500">{lastResult.errors}</div>
+                                  </div>
+                                </div>
+                              )}
+                              <br></br>
+                              <div className="space-y-4">
+                                <div>
+                                  <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Mod</div>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => setLessonInfiniteSettings(prev => ({ ...prev, [lesson.id]: { ...infiniteSettings, mode: 'standard' } }))}
+                                      className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all border-2 ${
+                                        infiniteSettings.mode === 'standard'
+                                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                                          : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-600'
+                                      }`}
+                                    >
+                                      <KeyboardIcon className="w-5 h-5" />
+                                      Psaní
+                                    </button>
+                                    <button
+                                      onClick={() => setLessonInfiniteSettings(prev => ({ ...prev, [lesson.id]: { ...infiniteSettings, mode: 'shooter' } }))}
+                                      className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold transition-all border-2 ${
+                                        infiniteSettings.mode === 'shooter'
+                                          ? 'border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                                          : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-600'
+                                      }`}
+                                    >
+                                      <Target className="w-5 h-5" />
+                                      Střílení
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <div className="text-sm font-bold text-slate-600 dark:text-slate-300 mb-2">Obtiznost</div>
+                                  <div className="flex gap-2">
+                                    {(['easy', 'medium', 'hard'] as const).map(level => (
+                                      <button
+                                        key={level}
+                                        onClick={() => setLessonInfiniteSettings(prev => ({ ...prev, [lesson.id]: { ...infiniteSettings, difficulty: level } }))}
+                                        className={`flex-1 py-3 px-4 rounded-xl font-bold transition-all border-2 ${
+                                          infiniteSettings.difficulty === level
+                                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                                            : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-600'
+                                        }`}
+                                      >
+                                        {level === 'easy' ? 'Lehká' : level === 'medium' ? 'Střední' : 'Těžká'}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-between">
+                                  <div className="text-sm font-bold text-slate-600 dark:text-slate-300">Zvýšující se obtížnost</div>
+                                  <button
+                                    onClick={() => setLessonInfiniteSettings(prev => ({ ...prev, [lesson.id]: { ...infiniteSettings, progressive: !infiniteSettings.progressive } }))}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                      infiniteSettings.progressive ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-600'
+                                    }`}
+                                  >
+                                    <span
+                                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                        infiniteSettings.progressive ? 'translate-x-6' : 'translate-x-1'
+                                      }`}
+                                    />
+                                  </button>
+                                </div>
+
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="text-sm font-bold text-slate-600 dark:text-slate-300">Délka</div>
+                                    <button
+                                      onClick={() => setLessonInfiniteSettings(prev => ({ ...prev, [lesson.id]: { ...infiniteSettings, durationSec: infiniteSettings.durationSec === null ? 120 : null } }))}
+                                      className={`px-3 py-1.5 rounded-xl text-sm font-bold transition-colors ${
+                                        infiniteSettings.durationSec === null
+                                          ? 'bg-blue-500 text-white'
+                                          : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                                      }`}
+                                    >
+                                      {infiniteSettings.durationSec === null ? 'Nekonečná' : 'Přepnout'}
+                                    </button>
+                                  </div>
+
+                                  {infiniteSettings.durationSec !== null && (
+                                    <div className="space-y-2">
+                                      <input
+                                        type="range"
+                                        min={30}
+                                        max={300}
+                                        step={30}
+                                        value={infiniteSettings.durationSec}
+                                        onChange={e => setLessonInfiniteSettings(prev => ({ ...prev, [lesson.id]: { ...infiniteSettings, durationSec: Number(e.target.value) } }))}
+                                        className="w-full accent-blue-500"
+                                      />
+                                      <div className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                                        {formatInfiniteDuration(infiniteSettings.durationSec)}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="pt-2">
+                                  <button
+                                    onClick={() => {
+                                      const categoryLetters = selectedCategory.subLessons
+                                        .flatMap(l => (l.newLetters || l.letters || '').split(''))
+                                        .filter((l, i, arr) => arr.indexOf(l) === i && l.trim())
+                                        .join('');
+
+                                      const infiniteLesson: SubLesson = {
+                                        ...lesson,
+                                        id: `infinite-${lesson.id}`,
+                                        title: `${lesson.title} (Infinite)`,
+                                        mode: 'infinite',
+                                        letters: categoryLetters,
+                                        infiniteMode: infiniteSettings.mode,
+                                        infiniteDifficulty: infiniteSettings.difficulty,
+                                        infiniteProgressive: infiniteSettings.progressive,
+                                        infiniteDurationSec: infiniteSettings.durationSec
+                                      };
+
+                                      setSelectedLesson(infiniteLesson);
+                                      setSelectedCategory(null);
+                                      setSelectedMode('infinite');
+                                      setInfiniteDifficulty(infiniteSettings.difficulty);
+                                      setExpandedLessonId(null);
+                                      startGame();
+                                    }}
+                                    className="w-full py-3 px-4 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 transition-colors"
+                                  >
+                                    Spustit nekonečný režim
+                                  </button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </motion.div>
           </motion.div>
