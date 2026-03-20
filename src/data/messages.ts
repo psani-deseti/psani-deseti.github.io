@@ -1,8 +1,8 @@
 export const perfectMessages = [
   "Jedeš jako sigma",
-  "No nekecej, takle dobrý?",
+  "No nekecej, takhle dobrý?",
   "Mistrovský výkon!",
-  "To čumim",
+  "To čumím",
   "Jsi fakt pinba!",
   "Pinba je nejlepší!"
 ];

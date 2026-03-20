@@ -6,7 +6,7 @@ export const categories: Category[] = [
 {
   id: 'fjdk',
   title: 'Základy: F J + D K',
-  description: 'Základní pozice ukazováčků a prostředníků na prostřední řadě.',
+  description: 'Základní pozice ukazováčků a prostředníčků na prostřední řadě.',
   subLessons: [
     {
       id: 'fjdk-1',
@@ -75,7 +75,7 @@ export const categories: Category[] = [
 {
   id: 'sl',
   title: 'Základy: S L',
-  description: 'Procvičení prostřední a prsteníku na levé a pravé ruce.',
+  description: 'Procvičení prsteníčku na levé a pravé ruce.',
   subLessons: [
     {
       id: 'sl-1',
@@ -145,7 +145,7 @@ export const categories: Category[] = [
 {
   id: 'au',
   title: 'Základy: A Ů',
-  description: 'Procvičení levého malíku a pravého malíku.',
+  description: 'Procvičení levého malíčku a pravého malíčku.',
   subLessons: [
     {
       id: 'au-1',
@@ -285,7 +285,7 @@ export const categories: Category[] = [
 {
   id: 'ru',
   title: 'Základy: R U',
-  description: 'Procvičení pravého ukazováčku a prostředníku.',
+  description: 'Procvičení pravého ukazováčku a prostředníčku.',
   subLessons: [
     {
       id: 'ru-1',
@@ -355,7 +355,7 @@ export const categories: Category[] = [
 {
   id: 'ei',
   title: 'Základy: E I',
-  description: 'Procvičení prostředníků na horní řadě.',
+  description: 'Procvičení prostředníčků na horní řadě.',
   subLessons: [
     {
       id: 'ei-1',

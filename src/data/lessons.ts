@@ -17,7 +17,7 @@ export const lessons: Lesson[] = [
   { id: 14, title: 'Písmena Y, Z', chars: 'fjdkslaůghrueioptúqwvmcxbnyz', text: 'y z y z fy jz dy kz sy lz y z y z fy jz dy kz sy lz' },
   { id: 15, title: 'Čárka, tečka', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.', text: 'k, l. d, s. f, j. a, ů. k, l. d, s. f, j. a, ů.' },
   { id: 16, title: 'Velká písmena', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.', text: 'A S D F J K L Ů G H R U E I O P A S D F J K L Ů G H R U E I O P' },
-  { id: 17, title: 'Věty bez diakritiky', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.', text: 'Tohle je veta bez diakritiky. Pisu vsema deseti. Tohle je veta bez diakritiky. Pisu vsema deseti.' },
+  { id: 17, title: 'Věty bez diakritiky', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.', text: 'Tohle je věta bez diakritiky. Píšu všema deseti. Tohle je věta bez diakritiky. Píšu všema deseti.' },
   { id: 18, title: 'Písmena Ř, Á', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.řá', text: 'ř á ř á fř já dř ká sř lá ř á ř á fř já dř ká sř lá' },
   { id: 19, title: 'Písmena Č, Í', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.řáčí', text: 'č í č í fč jí dč kí sč lí č í č í fč jí dč kí sč lí' },
   { id: 20, title: 'Písmena Š, É', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.řáčíšé', text: 'š é š é fš jé dš ké sš lé š é š é fš jé dš ké sš lé' },
