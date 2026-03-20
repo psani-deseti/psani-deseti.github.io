@@ -9,11 +9,11 @@ export const perfectMessages = [
 
 export const goodMessages = [
   "Skvělá práce!",
-  "Pinba je nejlepší!"
+  "Pinba je nejlepší!",
   "Jde ti to, ale ještě trochu mákni.",
   "Jen tak dál!",
   "Super!",
-  "Výborně!"
+  "Výborně!",
   "Makej makej!",
   "Pinba je nejlepší!",
   "Zlepšuješ se",
