@@ -311,7 +311,7 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
               transition={{ duration: 0.2 }}
               className="relative bg-white dark:bg-slate-800 p-8 sm:p-12 rounded-[2.5rem] border-2 border-slate-200 dark:border-slate-700 border-b-[12px] shadow-xl"
             >
-              <div className="flex flex-wrap gap-x-[0.15em] gap-y-4 font-mono text-3xl sm:text-4xl leading-relaxed select-none">
+              <div className="flex flex-wrap gap-x-[0.15em] gap-y-4 font-mono text-2xl sm:text-3xl leading-relaxed select-none">
                 {targetText.split('').map((char, i) => {
                   let colorClass = 'text-slate-300 dark:text-slate-600';
                   let bgClass = '';
