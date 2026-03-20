@@ -1,0 +1,27 @@
+import { Lesson } from '../types';
+
+export const lessons: Lesson[] = [
+  { id: 1, title: 'Základy: F J D K', chars: 'fjdk', text: 'f j d k f j d k fd jk df kj fjd kdj f d j k f j d k f j d k fd jk df kj fjd kdj f d j k' },
+  { id: 2, title: 'Písmena S, L', chars: 'fjdksl', text: 's l s l fs jl ds kl sl ls fsl jld s l s l fs jl ds kl sl ls fsl jld' },
+  { id: 3, title: 'Písmena A, Ů', chars: 'fjdkslaů', text: 'a ů a ů as lů fa jů da ků sad sůl a ů a ů as lů fa jů da ků sad sůl' },
+  { id: 4, title: 'Písmena G, H', chars: 'fjdkslaůgh', text: 'g h g h fg jh dg kh sg lh ag ůh g h g h fg jh dg kh sg lh ag ůh' },
+  { id: 5, title: 'Písmena R, U', chars: 'fjdkslaůghru', text: 'r u r u fr ju dr ku sr lu ar ůu r u r u fr ju dr ku sr lu ar ůu' },
+  { id: 6, title: 'Písmena E, I', chars: 'fjdkslaůghruei', text: 'e i e i de ki se li fe ji ge hi e i e i de ki se li fe ji ge hi' },
+  { id: 7, title: 'Písmena O, P', chars: 'fjdkslaůghrueiop', text: 'o p o p lo pů so lů do ko fo jo o p o p lo pů so lů do ko fo jo' },
+  { id: 8, title: 'Písmeno T a opakování', chars: 'fjdkslaůghrueiopt', text: 't t ft jt dt kt st lt at ůt rt ut t t ft jt dt kt st lt at ůt rt ut' },
+  { id: 9, title: 'Písmena Ú, Q, W', chars: 'fjdkslaůghrueioptúqw', text: 'ú q w ú q w jx fq dw sů aú ú q w ú q w jx fq dw sů aú' },
+  { id: 10, title: 'Opakování: dva řádky', chars: 'fjdkslaůghrueioptúqw', text: 'asdf jklů qwer uiop gh t ú asdf jklů qwer uiop gh t ú' },
+  { id: 11, title: 'Písmena V, M', chars: 'fjdkslaůghrueioptúqwvm', text: 'v m v m fv jm dv km sv lm av ům v m v m fv jm dv km sv lm av ům' },
+  { id: 12, title: 'Písmena C, X', chars: 'fjdkslaůghrueioptúqwvmcx', text: 'c x c x dc sx fc jc kc lc c x c x dc sx fc jc kc lc' },
+  { id: 13, title: 'Písmena B, N', chars: 'fjdkslaůghrueioptúqwvmcxbn', text: 'b n b n fb jn db kn sb ln b n b n fb jn db kn sb ln' },
+  { id: 14, title: 'Písmena Y, Z', chars: 'fjdkslaůghrueioptúqwvmcxbnyz', text: 'y z y z fy jz dy kz sy lz y z y z fy jz dy kz sy lz' },
+  { id: 15, title: 'Čárka, tečka', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.', text: 'k, l. d, s. f, j. a, ů. k, l. d, s. f, j. a, ů.' },
+  { id: 16, title: 'Velká písmena', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.', text: 'A S D F J K L Ů G H R U E I O P A S D F J K L Ů G H R U E I O P' },
+  { id: 17, title: 'Věty bez diakritiky', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.', text: 'Tohle je veta bez diakritiky. Pisu vsema deseti. Tohle je veta bez diakritiky. Pisu vsema deseti.' },
+  { id: 18, title: 'Písmena Ř, Á', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.řá', text: 'ř á ř á fř já dř ká sř lá ř á ř á fř já dř ká sř lá' },
+  { id: 19, title: 'Písmena Č, Í', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.řáčí', text: 'č í č í fč jí dč kí sč lí č í č í fč jí dč kí sč lí' },
+  { id: 20, title: 'Písmena Š, É', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.řáčíšé', text: 'š é š é fš jé dš ké sš lé š é š é fš jé dš ké sš lé' },
+  { id: 21, title: 'Písmena Ě, Ž', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.řáčíšéěž', text: 'ě ž ě ž fě jž dě kž sě lž ě ž ě ž fě jž dě kž sě lž' },
+  { id: 22, title: 'Písmeno Ý a opakování', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.řáčíšéěžý', text: 'ý ý fý jý dý ký sý lý ý ý fý jý dý ký sý lý' },
+  { id: 23, title: 'Přepis textu', chars: 'fjdkslaůghrueioptúqwvmcxbnyz,.řáčíšéěžý', text: 'Tohle je finální přepis textu. Umím psát všema deseti prsty a je to super! Tohle je finální přepis textu. Umím psát všema deseti prsty a je to super!' },
+];
