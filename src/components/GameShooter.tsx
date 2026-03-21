@@ -40,7 +40,7 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
   const scoreRef = useRef(0);
   const errorsRef = useRef(0);
 
-  const targetScore = isInfinite ? Infinity : 30; // Infinite mode has no target score
+  const targetScore = isInfinite ? Infinity : lesson.targetScore || 30; // Infinite mode has no target score
   const gameDuration = isInfinite && infiniteDurationSec !== null ? infiniteDurationSec * 1000 : null;
 
   const triggerShake = () => {

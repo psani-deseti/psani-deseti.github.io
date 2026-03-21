@@ -4,6 +4,8 @@ interface KeyboardProps {
   activeChar: string;
   showAllColors?: boolean;
   learnedLetters?: Set<string>;
+  selectedLetters?: Set<string>;
+  onKeyClick?: (key: string) => void;
 }
 
 const fingerColors: Record<number, string> = {
@@ -50,7 +52,7 @@ const rows = [
   ['Ctrl', 'Win', 'Alt', 'Space', 'AltGr', 'Win', 'Menu', 'CtrlRight']
 ];
 
-export const Keyboard: React.FC<KeyboardProps> = ({ activeChar, showAllColors = false, learnedLetters }) => {
+export const Keyboard: React.FC<KeyboardProps> = ({ activeChar, showAllColors = false, learnedLetters, selectedLetters, onKeyClick }) => {
   const isUpper = activeChar !== activeChar.toLowerCase() && activeChar.toLowerCase() !== activeChar.toUpperCase();
   const lowerChar = activeChar.toLowerCase();
 
@@ -124,13 +126,28 @@ export const Keyboard: React.FC<KeyboardProps> = ({ activeChar, showAllColors = 
             if (key === 'Backspace') widthClass = "w-24 h-10 sm:h-12";
             if (key === 'Ctrl' || key === 'CtrlRight' || key === 'Win' || key === 'Alt' || key === 'AltGr' || key === 'Menu') widthClass = "w-12 h-10 sm:w-14 sm:h-12";
 
+            const isSelected = selectedLetters?.has(key.toLowerCase());
+            const isClickable = onKeyClick && !isSpecialKey && key.length === 1;
+            const KeyComponent = isClickable ? 'button' : 'div';
+            
+            let selectionClasses = '';
+            if (isClickable) {
+              selectionClasses = 'hover:bg-slate-200 dark:hover:bg-slate-600';
+            }
+            if (isSelected) {
+              selectionClasses = 'ring-4 ring-offset-2 ring-offset-slate-100 dark:ring-offset-slate-800 ring-blue-500';
+              inactiveClasses = `bg-white dark:bg-slate-600 text-slate-600 dark:text-slate-200 border-slate-300 dark:border-slate-500 border-b-4`;
+            }
+
+
             return (
-              <div
+              <KeyComponent
                 key={key}
-                className={`${baseClasses} ${widthClass} ${isKeyActive ? activeClasses : inactiveClasses}`}
+                onClick={isClickable ? () => onKeyClick(key.toLowerCase()) : undefined}
+                className={`${baseClasses} ${widthClass} ${isKeyActive ? activeClasses : inactiveClasses} ${selectionClasses}`}
               >
                 {key === 'Space' ? '' : displayKey}
-              </div>
+              </KeyComponent>
             );
           })}
         </div>

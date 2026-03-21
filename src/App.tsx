@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { GameMode, Settings, Lesson, GameStats, Category, SubLesson } from './types';
+import { GameMode, Settings, GameStats, Category, SubLesson } from './types';
 import { categories } from './data/categories';
 import { perfectMessages, goodMessages, tryAgainMessages } from './data/messages';
 import { GameStandard } from './components/GameStandard';
 import { GameShooter } from './components/GameShooter';
 import { GameWordShooter } from './components/GameWordShooter';
 import { GameChallenge } from './components/GameChallenge';
+import { PracticeHub, PracticeSettings } from './components/PracticeHub';
 import { Keyboard } from './components/Keyboard';
 import { VerticalTimer } from './components/VerticalTimer';
 import { Settings as SettingsIcon, Play, Target, Clock, Trophy, ArrowLeft, RotateCcw, Map as MapIcon, Dumbbell, Star, X, CheckCircle2, HelpCircle, ArrowRight, Keyboard as KeyboardIcon, TrendingUp } from 'lucide-react';
@@ -23,10 +24,79 @@ type LessonStats = {
   };
 };
 
+type PracticeProgressSummary = {
+  attempts: number;
+  bestWpm: number;
+  bestAccuracy: number;
+  bestErrors: number;
+  lastPlayedAt: string;
+  lastResult: GameStats;
+};
+
 const EMPTY_LESSON_STATS = {
   stars: 0,
   attempts: 0,
   bestWpm: 0,
+};
+
+const PRACTICE_LESSON_PREFIX = 'practice-custom-';
+
+const normalizePracticeLetters = (letters: string[]) =>
+  Array.from(new Set(letters.map((letter) => letter.toLowerCase()))).sort();
+
+const createPracticeKey = (settings: PracticeSettings) => {
+  const normalizedLetters = normalizePracticeLetters(settings.letters);
+  return `${settings.mode}__${settings.lengthType}__${settings.length}__${normalizedLetters.join('')}`;
+};
+
+const createPracticeLesson = (settings: PracticeSettings): { lesson: SubLesson; mode: GameMode } => {
+  const letters = normalizePracticeLetters(settings.letters).join('');
+  const modeLabel = settings.mode === 'classic' ? 'Classic writing' : 'Shooting letters';
+  const lengthLabel = settings.lengthType === 'time' ? `${settings.length} sec` : `${settings.length} chars`;
+
+  if (settings.lengthType === 'time') {
+    return {
+      mode: 'infinite',
+      lesson: {
+        id: `${PRACTICE_LESSON_PREFIX}${createPracticeKey(settings)}`,
+        title: `${modeLabel} · ${letters.toUpperCase()}`,
+        mode: 'infinite',
+        letters,
+        infiniteMode: settings.mode === 'classic' ? 'standard' : 'shooter',
+        infiniteDifficulty: 'medium',
+        infiniteProgressive: false,
+        infiniteDurationSec: settings.length,
+      },
+    };
+  }
+
+  if (settings.mode === 'classic') {
+    return {
+      mode: 'random',
+      lesson: {
+        id: `${PRACTICE_LESSON_PREFIX}${createPracticeKey(settings)}`,
+        title: `${modeLabel} · ${letters.toUpperCase()}`,
+        mode: 'random',
+        letters,
+        pageCount: 1,
+        pageLength: settings.length,
+        max_comb: 2,
+      },
+    };
+  }
+
+  return {
+    mode: 'shooter',
+    lesson: {
+      id: `${PRACTICE_LESSON_PREFIX}${createPracticeKey(settings)}`,
+      title: `${modeLabel} · ${letters.toUpperCase()}`,
+      mode: 'shooter',
+      letters,
+      targetScore: settings.length,
+      text: letters,
+      examples: [lengthLabel],
+    },
+  };
 };
 
 export default function App() {
@@ -44,12 +114,16 @@ export default function App() {
   const [selectedMode, setSelectedMode] = useState<GameMode>('standard');
   const [stats, setStats] = useState<GameStats | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [lastCompletedLessonId, setLastCompletedLessonId] = useState<string | null>(null);
   const [isWriting, setIsWriting] = useState(false);
   const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
   const [lessonInfiniteSettings, setLessonInfiniteSettings] = useState<Record<string, { mode: 'standard' | 'shooter'; difficulty: 'easy' | 'medium' | 'hard'; progressive: boolean; durationSec: number | null }>>({});
   const [infiniteResults, setInfiniteResults] = useState<Record<string, InfiniteRunSummary>>(() => {
     const saved = localStorage.getItem('ninjaInfiniteResults');
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [activePracticeSettings, setActivePracticeSettings] = useState<PracticeSettings | null>(null);
+  const [practiceProgress, setPracticeProgress] = useState<Record<string, PracticeProgressSummary>>(() => {
+    const saved = localStorage.getItem('ninjaPracticeProgress');
     return saved ? JSON.parse(saved) : {};
   });
   
@@ -142,6 +216,10 @@ export default function App() {
   }, [infiniteResults]);
 
   useEffect(() => {
+    localStorage.setItem('ninjaPracticeProgress', JSON.stringify(practiceProgress));
+  }, [practiceProgress]);
+
+  useEffect(() => {
     localStorage.setItem('ninjaLessonStats', JSON.stringify(lessonStats));
   }, [lessonStats]);
 
@@ -183,9 +261,27 @@ export default function App() {
   const handleGameComplete = (gameStats: GameStats) => {
     setStats(gameStats);
     setScreen('evaluation');
-    setLastCompletedLessonId(selectedLesson.id.toString());
+    const isCustomPractice = selectedLesson.id.toString().startsWith(PRACTICE_LESSON_PREFIX);
 
-    if (selectedLesson.mode === 'infinite') {
+    if (isCustomPractice && activePracticeSettings) {
+      const practiceKey = createPracticeKey(activePracticeSettings);
+      setPracticeProgress(prev => {
+        const previous = prev[practiceKey];
+        return {
+          ...prev,
+          [practiceKey]: {
+            attempts: (previous?.attempts ?? 0) + 1,
+            bestWpm: Math.max(previous?.bestWpm ?? 0, gameStats.wpm),
+            bestAccuracy: Math.max(previous?.bestAccuracy ?? 0, gameStats.accuracy),
+            bestErrors: Math.min(previous?.bestErrors ?? gameStats.errors, gameStats.errors),
+            lastPlayedAt: new Date().toISOString(),
+            lastResult: gameStats,
+          },
+        };
+      });
+    }
+
+    if (!isCustomPractice && selectedLesson.mode === 'infinite') {
       const originalLessonId = selectedLesson.id.toString().startsWith('infinite-')
         ? selectedLesson.id.toString().slice('infinite-'.length)
         : selectedLesson.id.toString();
@@ -204,7 +300,7 @@ export default function App() {
     }
 
     const earnedStars = gameStats.accuracy >= 95 ? 3 : gameStats.accuracy >= 85 ? 2 : gameStats.accuracy >= 70 ? 1 : 0;
-    if (selectedLesson.mode !== 'infinite') {
+    if (!isCustomPractice && selectedLesson.mode !== 'infinite') {
       const lessonId = selectedLesson.id.toString();
       setLessonStats(prev => {
         const newStats = { ...prev };
@@ -319,6 +415,9 @@ export default function App() {
   };
   const practiceLessonCount = categories.reduce((sum, category) => sum + category.subLessons.filter(lesson => lesson.mode !== 'infinite').length, 0);
   const completedPracticeLessonCount = categories.reduce((sum, category) => sum + category.subLessons.filter(lesson => lesson.mode !== 'infinite' && completedLessons.includes(lesson.id.toString())).length, 0);
+  const isCustomPracticeLesson = selectedLesson.id.toString().startsWith(PRACTICE_LESSON_PREFIX);
+  const activePracticeKey = activePracticeSettings ? createPracticeKey(activePracticeSettings) : null;
+  const activePracticeSummary = activePracticeKey ? practiceProgress[activePracticeKey] : null;
   const formatInfiniteDuration = (durationSec: number | null | undefined) => {
     if (durationSec == null) return 'Infinite';
     if (durationSec < 60) return `${durationSec}s`;
@@ -328,6 +427,15 @@ export default function App() {
   const getLessonStats = (lessonId: string) =>
     lessonStats[lessonId] || (completedLessons.includes(lessonId) ? { ...EMPTY_LESSON_STATS, attempts: 1 } : EMPTY_LESSON_STATS);
   const formatAttemptLabel = (attempts: number) => `pokus${attempts === 1 ? '' : attempts >= 2 && attempts <= 4 ? 'y' : 'u'}`;
+  const startCustomPractice = (practiceSettings: PracticeSettings) => {
+    const practiceSession = createPracticeLesson(practiceSettings);
+    setActivePracticeSettings(practiceSettings);
+    setSelectedLesson(practiceSession.lesson);
+    setSelectedMode(practiceSession.mode);
+    setSelectedCategory(null);
+    setStats(null);
+    setScreen('game');
+  };
   const startPracticeGame = () => {
     if (selectedMode === 'infinite') {
       const categoryLetters = (selectedLessonCategory?.subLessons || [])
@@ -357,6 +465,7 @@ export default function App() {
 
   const handleNextLesson = () => {
     if (nextLesson) {
+      setActivePracticeSettings(null);
       setSelectedLesson(nextLesson);
       setSelectedMode(nextLesson.mode || 'standard');
       setSelectedCategory(null);
@@ -369,6 +478,12 @@ export default function App() {
 
   const handleBackToMenu = () => {
     setScreen('menu');
+    if (isCustomPracticeLesson) {
+      setCurrentTab('practice');
+      setSelectedCategory(null);
+      return;
+    }
+
     setCurrentTab('path');
     
     // Find the category of the last lesson
@@ -400,6 +515,12 @@ export default function App() {
 
   const handleCancel = () => {
     setScreen('menu');
+    if (isCustomPracticeLesson) {
+      setCurrentTab('practice');
+      setSelectedCategory(null);
+      return;
+    }
+
     const cat = categories.find(c => c.subLessons.some(l => l.id === selectedLesson.id));
     if (cat) {
       setSelectedCategory(cat);
@@ -732,6 +853,9 @@ export default function App() {
                   transition={{ duration: 0.2 }}
                   className="space-y-8"
                 >
+                  <PracticeHub onStartPractice={startCustomPractice} learnedLetters={learnedLetters} />
+                  {false && (
+                  <>
                   <div className="relative overflow-hidden rounded-[2rem] border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 border-b-[10px] p-6 sm:p-8">
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.12),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(34,197,94,0.10),_transparent_30%)]" />
                     <div className="relative grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-8 items-start">
@@ -1036,6 +1160,8 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                  </>
+                  )}
                 </motion.div>
               )}              {currentTab === 'help' && (
                 <motion.div 
@@ -1162,7 +1288,9 @@ export default function App() {
                   }
                 })()}
               </motion.h2>
-              <p className="text-xl font-medium text-slate-500 dark:text-slate-400">Dokončil jsi lekci <strong className="text-blue-500 dark:text-blue-400">{selectedLesson.title}</strong></p>
+              <p className="text-xl font-medium text-slate-500 dark:text-slate-400">
+                {isCustomPracticeLesson ? 'Dokoncil jsi trenink' : 'Dokoncil jsi lekci'} <strong className="text-blue-500 dark:text-blue-400">{selectedLesson.title}</strong>
+              </p>
               
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mt-8">
                 <motion.div 
@@ -1196,6 +1324,37 @@ export default function App() {
                 </motion.div>
               </div>
 
+              {isCustomPracticeLesson && activePracticeSettings && activePracticeSummary && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1.7 }}
+                  className="rounded-3xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-6 text-left"
+                >
+                  <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Tvuj progres</div>
+                  <div className="mt-3 text-lg font-black text-slate-800 dark:text-slate-100">
+                    {activePracticeSettings.mode === 'classic' ? 'Classic writing' : 'Shooting letters'} · {activePracticeSettings.letters.join(' ').toUpperCase()}
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                    {activePracticeSettings.lengthType === 'time' ? `${activePracticeSettings.length} sec` : `${activePracticeSettings.length} chars`}
+                  </div>
+                  <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-4">
+                      <div className="text-xs font-black uppercase tracking-wide text-slate-400">Attempts</div>
+                      <div className="mt-2 text-3xl font-black text-slate-800 dark:text-slate-100">{activePracticeSummary.attempts}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-4">
+                      <div className="text-xs font-black uppercase tracking-wide text-slate-400">Best WPM</div>
+                      <div className="mt-2 text-3xl font-black text-blue-500">{activePracticeSummary.bestWpm}</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-4">
+                      <div className="text-xs font-black uppercase tracking-wide text-slate-400">Best accuracy</div>
+                      <div className="mt-2 text-3xl font-black text-emerald-500">{activePracticeSummary.bestAccuracy}%</div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -1215,7 +1374,7 @@ export default function App() {
                   <RotateCcw className="w-6 h-6" />
                   Znovu
                 </button>
-                {nextLesson && (
+                {!isCustomPracticeLesson && nextLesson && (
                   <button
                     onClick={handleNextLesson}
                     className="px-8 py-4 bg-blue-500 border-b-4 border-blue-600 hover:bg-blue-400 text-white rounded-2xl font-extrabold text-lg transition-all flex items-center justify-center gap-2 hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0"

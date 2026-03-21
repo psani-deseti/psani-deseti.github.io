@@ -35,10 +35,11 @@ export interface SubLesson {
   infiniteDifficulty?: 'easy' | 'medium' | 'hard'; // Difficulty level for infinite
   infiniteProgressive?: boolean; // Whether difficulty increases over time
   infiniteDurationSec?: number | null; // Time limit for infinite mode, null = no limit
+  targetScore?: number;
 }
 
 export interface Category {
-  id: string;
+  id:string;
   title: string;
   description: string;
   subLessons: SubLesson[];
