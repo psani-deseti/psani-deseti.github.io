@@ -163,9 +163,7 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
   const activeChar = targetText[currentIndex] || '';
 
   useEffect(() => {
-    if (!showFingerGuide && containerRef.current) {
-      containerRef.current.focus();
-    }
+    containerRef.current?.focus();
   }, [showFingerGuide, currentPageIndex]);
 
   useEffect(() => {
@@ -245,6 +243,13 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
       e.preventDefault();
     }
 
+    if (showFingerGuide) {
+      if (e.key === ' ') {
+        setShowFingerGuide(false);
+      }
+      return;
+    }
+
     // If page is finished, spacebar advances to next page
     if (input.length === targetText.length && e.key === ' ') {
       if (currentPageIndex < pages.length - 1) {
@@ -257,8 +262,6 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
       }
     }
 
-    if (showFingerGuide) return;
-    
     if (e.key.length > 1 && e.key !== 'Backspace') return;
 
     if (!startTime) {

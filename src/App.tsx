@@ -19,12 +19,14 @@ type LessonStats = {
   [lessonId: string]: {
     stars: number;
     attempts: number;
+    bestWpm: number;
   };
 };
 
 const EMPTY_LESSON_STATS = {
   stars: 0,
   attempts: 0,
+  bestWpm: 0,
 };
 
 export default function App() {
@@ -65,7 +67,18 @@ export default function App() {
 
   const [lessonStats, setLessonStats] = useState<LessonStats>(() => {
     const saved = localStorage.getItem('ninjaLessonStats');
-    return saved ? JSON.parse(saved) : {};
+    if (!saved) return {};
+    const parsed = JSON.parse(saved) as Record<string, Partial<{ stars: number; attempts: number; bestWpm: number }>>;
+    return Object.fromEntries(
+      Object.entries(parsed).map(([lessonId, value]) => [
+        lessonId,
+        {
+          stars: value.stars ?? 0,
+          attempts: value.attempts ?? 0,
+          bestWpm: value.bestWpm ?? 0,
+        },
+      ])
+    );
   });
 
   const [completedLessons, setCompletedLessons] = useState<string[]>(() => {
@@ -195,10 +208,11 @@ export default function App() {
       const lessonId = selectedLesson.id.toString();
       setLessonStats(prev => {
         const newStats = { ...prev };
-        const currentStats = newStats[lessonId] || { stars: 0, attempts: 0 };
+        const currentStats = newStats[lessonId] || EMPTY_LESSON_STATS;
         newStats[lessonId] = {
           stars: Math.max(currentStats.stars, earnedStars),
           attempts: currentStats.attempts + 1,
+          bestWpm: Math.max(currentStats.bestWpm, gameStats.wpm),
         };
         return newStats;
       });
@@ -272,7 +286,7 @@ export default function App() {
     const newLessonStats: LessonStats = {};
     allIds.forEach(id => {
       if (!id.includes('infinite')) {
-        newLessonStats[id] = { stars: 3, attempts: 1 };
+        newLessonStats[id] = { stars: 3, attempts: 1, bestWpm: 0 };
       }
     });
     setLessonStats(newLessonStats);
@@ -312,7 +326,7 @@ export default function App() {
     return Number.isInteger(minutes) ? `${minutes} min` : `${durationSec}s`;
   };
   const getLessonStats = (lessonId: string) =>
-    lessonStats[lessonId] || (completedLessons.includes(lessonId) ? { stars: 0, attempts: 1 } : EMPTY_LESSON_STATS);
+    lessonStats[lessonId] || (completedLessons.includes(lessonId) ? { ...EMPTY_LESSON_STATS, attempts: 1 } : EMPTY_LESSON_STATS);
   const formatAttemptLabel = (attempts: number) => `pokus${attempts === 1 ? '' : attempts >= 2 && attempts <= 4 ? 'y' : 'u'}`;
   const startPracticeGame = () => {
     if (selectedMode === 'infinite') {
@@ -345,14 +359,9 @@ export default function App() {
     if (nextLesson) {
       setSelectedLesson(nextLesson);
       setSelectedMode(nextLesson.mode || 'standard');
+      setSelectedCategory(null);
       setScreen('game');
       setStats(null);
-      
-      // If the next lesson is in a different category, update selectedCategory
-      const nextCat = categories.find(c => c.subLessons.some(l => l.id === nextLesson.id));
-      if (nextCat) {
-        setSelectedCategory(nextCat);
-      }
     } else {
       setScreen('menu');
     }
@@ -375,6 +384,19 @@ export default function App() {
       }, 100);
     }
   };
+
+  useEffect(() => {
+    if (screen !== 'evaluation' || !nextLesson) return;
+
+    const handleEvaluationSpace = (event: KeyboardEvent) => {
+      if (event.code !== 'Space' && event.key !== ' ') return;
+      event.preventDefault();
+      handleNextLesson();
+    };
+
+    window.addEventListener('keydown', handleEvaluationSpace);
+    return () => window.removeEventListener('keydown', handleEvaluationSpace);
+  }, [handleNextLesson, nextLesson, screen]);
 
   const handleCancel = () => {
     setScreen('menu');
@@ -833,6 +855,9 @@ export default function App() {
                                           </div>
                                           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                                             {lessonProgress.attempts} {formatAttemptLabel(lessonProgress.attempts)}
+                                          </span>
+                                          <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                                            Best {lessonProgress.bestWpm} WPM
                                           </span>
                                         </div>
                                       </div>
@@ -1294,6 +1319,9 @@ export default function App() {
                               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                                 {lessonProgress.attempts} {formatAttemptLabel(lessonProgress.attempts)}
                               </span>
+                              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
+                                Best {lessonProgress.bestWpm} WPM
+                              </span>
                             </div>
                           </div>
                           {isCompleted ? (
@@ -1496,7 +1524,6 @@ export default function App() {
                                       setSelectedLesson(infiniteLesson);
                                       setSelectedCategory(null);
                                       setSelectedMode('infinite');
-                                      setInfiniteDifficulty(infiniteSettings.difficulty);
                                       setExpandedLessonId(null);
                                       startGame();
                                     }}
