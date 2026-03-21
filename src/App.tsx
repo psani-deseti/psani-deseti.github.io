@@ -15,6 +15,18 @@ import { motion, AnimatePresence } from 'motion/react';
 type Screen = 'menu' | 'game' | 'evaluation';
 type Tab = 'path' | 'practice';
 
+type LessonStats = {
+  [lessonId: string]: {
+    stars: number;
+    attempts: number;
+  };
+};
+
+const EMPTY_LESSON_STATS = {
+  stars: 0,
+  attempts: 0,
+};
+
 export default function App() {
   type InfiniteRunSummary = GameStats & {
     playedAt: string;
@@ -49,6 +61,11 @@ export default function App() {
       darkMode: parsed.darkMode ?? false,
       shooterDifficulty: parsed.shooterDifficulty ?? 'medium',
     };
+  });
+
+  const [lessonStats, setLessonStats] = useState<LessonStats>(() => {
+    const saved = localStorage.getItem('ninjaLessonStats');
+    return saved ? JSON.parse(saved) : {};
   });
 
   const [completedLessons, setCompletedLessons] = useState<string[]>(() => {
@@ -111,6 +128,10 @@ export default function App() {
     localStorage.setItem('ninjaInfiniteResults', JSON.stringify(infiniteResults));
   }, [infiniteResults]);
 
+  useEffect(() => {
+    localStorage.setItem('ninjaLessonStats', JSON.stringify(lessonStats));
+  }, [lessonStats]);
+
   const startGame = () => {
     setScreen('game');
   };
@@ -169,12 +190,24 @@ export default function App() {
       }));
     }
 
-    if (selectedLesson.mode !== 'infinite' && !completedLessons.includes(selectedLesson.id.toString())) {
-      setCompletedLessons([...completedLessons, selectedLesson.id.toString()]);
+    const earnedStars = gameStats.accuracy >= 95 ? 3 : gameStats.accuracy >= 85 ? 2 : gameStats.accuracy >= 70 ? 1 : 0;
+    if (selectedLesson.mode !== 'infinite') {
+      const lessonId = selectedLesson.id.toString();
+      setLessonStats(prev => {
+        const newStats = { ...prev };
+        const currentStats = newStats[lessonId] || { stars: 0, attempts: 0 };
+        newStats[lessonId] = {
+          stars: Math.max(currentStats.stars, earnedStars),
+          attempts: currentStats.attempts + 1,
+        };
+        return newStats;
+      });
+      if (!completedLessons.includes(lessonId)) {
+        setCompletedLessons([...completedLessons, lessonId]);
+      }
     }
 
     // Trigger sound
-    const earnedStars = gameStats.accuracy >= 95 ? 3 : gameStats.accuracy >= 85 ? 2 : gameStats.accuracy >= 70 ? 1 : 0;
 
     if (earnedStars === 3) {
       // Success arpeggio
@@ -227,13 +260,22 @@ export default function App() {
 
   const confirmReset = () => {
     setCompletedLessons([]);
+    setLessonStats({});
     localStorage.removeItem('ninjaProgress');
+    localStorage.removeItem('ninjaLessonStats');
     setShowResetConfirm(false);
   };
 
   const cheatProgress = () => {
     const allIds = categories.flatMap(c => c.subLessons.map(l => l.id.toString()));
     setCompletedLessons(allIds);
+    const newLessonStats: LessonStats = {};
+    allIds.forEach(id => {
+      if (!id.includes('infinite')) {
+        newLessonStats[id] = { stars: 3, attempts: 1 };
+      }
+    });
+    setLessonStats(newLessonStats);
   };
 
   const nextLesson = React.useMemo(() => {
@@ -269,6 +311,9 @@ export default function App() {
     const minutes = durationSec / 60;
     return Number.isInteger(minutes) ? `${minutes} min` : `${durationSec}s`;
   };
+  const getLessonStats = (lessonId: string) =>
+    lessonStats[lessonId] || (completedLessons.includes(lessonId) ? { stars: 0, attempts: 1 } : EMPTY_LESSON_STATS);
+  const formatAttemptLabel = (attempts: number) => `pokus${attempts === 1 ? '' : attempts >= 2 && attempts <= 4 ? 'y' : 'u'}`;
   const startPracticeGame = () => {
     if (selectedMode === 'infinite') {
       const categoryLetters = (selectedLessonCategory?.subLessons || [])
@@ -371,7 +416,13 @@ export default function App() {
 
   // Helper to check if a category is fully completed
   const isCategoryCompleted = (category: Category) => {
-    return category.subLessons.every(l => completedLessons.includes(l.id.toString()));
+    return category.subLessons.filter(l => l.mode !== 'infinite').every(l => completedLessons.includes(l.id.toString()));
+  };
+
+  const isCategoryPerfect = (category: Category) => {
+    return category.subLessons
+      .filter(l => l.mode !== 'infinite')
+      .every(l => getLessonStats(l.id.toString()).stars === 3);
   };
 
   return (
@@ -443,9 +494,23 @@ export default function App() {
               exit={{ opacity: 0, y: -20 }}
               className="max-w-4xl mx-auto"
             >
-              {showSettings && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                  <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border-2 border-slate-200 dark:border-slate-700 shadow-xl max-w-md w-full space-y-4">
+              <AnimatePresence>
+                {showSettings && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+                    onClick={() => setShowSettings(false)}
+                  >
+                  <motion.div
+                    initial={{ opacity: 0, y: 24, scale: 0.94 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 18, scale: 0.97 }}
+                    transition={{ type: 'spring', damping: 24, stiffness: 260 }}
+                    className="bg-white dark:bg-slate-800 p-6 rounded-3xl border-2 border-slate-200 dark:border-slate-700 shadow-xl max-w-md w-full space-y-4"
+                    onClick={e => e.stopPropagation()}
+                  >
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="font-extrabold text-xl text-slate-700 dark:text-slate-200">Nastavení</h3>
                       <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full text-slate-500">
@@ -529,9 +594,10 @@ export default function App() {
                         Odemknout vše
                       </button>
                     </div>
-                  </div>
-                </div>
+                  </motion.div>
+                </motion.div>
               )}
+              </AnimatePresence>
 
               {showResetConfirm && (
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -599,13 +665,16 @@ export default function App() {
                     {categories.map((category, i) => {
                       const offset = Math.sin(i * 0.7) * 80;
                       const isCompleted = isCategoryCompleted(category);
+                      const isPerfect = isCategoryPerfect(category);
                       const isUnlocked = i === 0 || isCategoryCompleted(categories[i - 1]);
                       
                       let colorClass = 'bg-slate-300 border-slate-400 text-slate-500';
                       if (isUnlocked) {
-                        colorClass = isCompleted 
-                          ? 'bg-yellow-400 border-yellow-500 hover:bg-yellow-300 text-white' 
-                          : 'bg-blue-500 border-blue-600 hover:bg-blue-400 text-white';
+                        colorClass = isPerfect
+                          ? 'bg-yellow-400 border-yellow-500 hover:bg-yellow-300 text-white'
+                          : isCompleted
+                            ? 'bg-emerald-500 border-emerald-600 hover:bg-emerald-400 text-white'
+                            : 'bg-blue-500 border-blue-600 hover:bg-blue-400 text-white';
                       }
                       
                       return (
@@ -619,7 +688,7 @@ export default function App() {
                               onClick={() => setSelectedCategory(category)}
                               className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full ${colorClass} border-b-[8px] font-extrabold text-2xl sm:text-3xl flex items-center justify-center ${isUnlocked ? 'hover:translate-y-1 hover:border-b-[4px] active:translate-y-2 active:border-b-0 cursor-pointer' : 'opacity-80 cursor-not-allowed'} transition-all shadow-sm`}
                             >
-                              {isCompleted ? <Star className="w-10 h-10 fill-white" /> : <Star className="w-10 h-10 fill-white/20" />}
+                              {isPerfect ? <Star className="w-10 h-10 fill-white" /> : <Star className="w-10 h-10 fill-white/20" />}
                             </button>
                             <div className="mt-3 bg-white dark:bg-slate-800 px-4 py-2 rounded-2xl border-2 border-slate-200 dark:border-slate-700 border-b-4 font-bold text-slate-600 dark:text-slate-300 text-sm sm:text-base whitespace-nowrap shadow-sm">
                               {category.title}
@@ -728,6 +797,7 @@ export default function App() {
                               {category.subLessons.filter(lesson => lesson.mode !== 'infinite').map(lesson => {
                                 const isSelected = selectedLessonBaseId === lesson.id.toString();
                                 const isCompleted = completedLessons.includes(lesson.id.toString());
+                                const lessonProgress = getLessonStats(lesson.id.toString());
 
                                 return (
                                   <button
@@ -747,6 +817,23 @@ export default function App() {
                                         <div className="font-extrabold text-sm text-slate-800 dark:text-slate-100">{lesson.title}</div>
                                         <div className="mt-2 text-[11px] uppercase font-black tracking-wider text-slate-400">
                                           {lesson.mode === 'random' ? 'Random' : lesson.mode === 'challenge' ? 'Vyzva' : lesson.mode === 'shooter' ? 'Strilecka' : lesson.mode === 'wordShooter' ? 'Word Shooter' : 'Klasika'}
+                                        </div>
+                                        <div className="mt-3 flex items-center gap-2">
+                                          <div className="flex items-center gap-0.5">
+                                            {[0, 1, 2].map(starIndex => (
+                                              <Star
+                                                key={starIndex}
+                                                className={`w-3.5 h-3.5 ${
+                                                  starIndex < lessonProgress.stars
+                                                    ? 'text-amber-400 fill-amber-400'
+                                                    : 'text-slate-300 dark:text-slate-600'
+                                                }`}
+                                              />
+                                            ))}
+                                          </div>
+                                          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                            {lessonProgress.attempts} {formatAttemptLabel(lessonProgress.attempts)}
+                                          </span>
                                         </div>
                                       </div>
                                       {isCompleted && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
@@ -1159,6 +1246,7 @@ export default function App() {
                 <div className="space-y-3">
                   {selectedCategoryLessons.map((lesson, index) => {
                     const isCompleted = completedLessons.includes(lesson.id.toString());
+                    const lessonProgress = getLessonStats(lesson.id.toString());
 
                     return (
                       <div key={lesson.id} className="space-y-2">
@@ -1188,6 +1276,23 @@ export default function App() {
                               </span>
                               <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-slate-500">
                                 {lesson.mode === 'random' ? '3 strany' : lesson.mode === 'shooter' || lesson.mode === 'wordShooter' ? 'Nekonecno' : '1 strana'}
+                              </span>
+                            </div>
+                            <div className="mt-3 flex items-center gap-2">
+                              <div className="flex items-center gap-0.5">
+                                {[0, 1, 2].map(starIndex => (
+                                  <Star
+                                    key={starIndex}
+                                    className={`w-4 h-4 ${
+                                      starIndex < lessonProgress.stars
+                                        ? 'text-amber-400 fill-amber-400'
+                                        : 'text-slate-300 dark:text-slate-600'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                {lessonProgress.attempts} {formatAttemptLabel(lessonProgress.attempts)}
                               </span>
                             </div>
                           </div>

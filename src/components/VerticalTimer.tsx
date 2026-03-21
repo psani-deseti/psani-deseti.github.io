@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Pause, Plus, ChevronsRight } from 'lucide-react';
+import { Play, Pause, Plus, ChevronsRight, RotateCcw } from 'lucide-react';
 
 interface VerticalTimerProps {
   isWriting: boolean;
@@ -44,6 +44,12 @@ export const VerticalTimer: React.FC<VerticalTimerProps> = ({ isWriting }) => {
     setMaxTime(prevMax => Math.max(prevMax, time + seconds));
   };
 
+  const handleReset = () => {
+    setTime(10 * 60);
+    setMaxTime(10 * 60);
+    setIsRunning(false);
+  };
+
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
@@ -82,15 +88,23 @@ export const VerticalTimer: React.FC<VerticalTimerProps> = ({ isWriting }) => {
         {formatTime(time)}
       </div>
 
-      <button
-        onClick={handleStartStop}
-        className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all text-white ${
-          isRunning ? 'bg-red-500 border-b-4 border-red-600 hover:bg-red-400' : 'bg-green-500 border-b-4 border-green-600 hover:bg-green-400'
-        }`}
-      >
-        {isRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-        <span>{isRunning ? 'Pauza' : 'Start'}</span>
-      </button>
+      <div className="flex gap-2 w-full">
+        <button
+          onClick={handleStartStop}
+          className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all text-white ${
+            isRunning ? 'bg-red-500 border-b-4 border-red-600 hover:bg-red-400' : 'bg-green-500 border-b-4 border-green-600 hover:bg-green-400'
+          }`}
+        >
+          {isRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+          <span>{isRunning ? 'Pauza' : 'Start'}</span>
+        </button>
+        <button
+          onClick={handleReset}
+          className="flex items-center justify-center px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold rounded-lg border-b-2 border-gray-300 dark:border-gray-600 hover:bg-gray-300 dark:hover:bg-gray-600"
+        >
+          <RotateCcw className="w-5 h-5" />
+        </button>
+      </div>
 
       <div className="flex gap-2 w-full">
         <button
