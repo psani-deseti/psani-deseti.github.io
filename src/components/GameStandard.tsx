@@ -225,11 +225,12 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
     setIsWriting(false);
     const endTime = Date.now();
     const timeMs = endTime - (startTime || endTime);
-    const minutes = timeMs / 60000;
+    const minutes = Math.max(timeMs / 60000, 1 / 60000);
     
     const totalLength = pages.reduce((acc, p) => acc + p.length, 0);
-    const words = totalLength / 5;
-    const wpm = minutes > 0 ? Math.round(words / minutes) : 0;
+    const correctChars = Math.max(0, totalLength - finalErrors);
+    const words = correctChars / 5;
+    const wpm = Math.round(words / minutes);
     const accuracy = Math.max(0, Math.round(((totalLength - finalErrors) / totalLength) * 100));
     
     onComplete({ wpm, accuracy, errors: finalErrors, timeMs });

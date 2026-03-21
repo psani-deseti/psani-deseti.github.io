@@ -38,6 +38,7 @@ export const GameWordShooter: React.FC<GameWordShooterProps> = ({ lesson, settin
   const scoreRef = useRef(0);
   const errorsRef = useRef(0);
   const lockedIdRef = useRef<number | null>(null);
+  const completedCharsRef = useRef(0);
 
   const targetScore = 15; // Fewer words needed than single letters
 
@@ -63,6 +64,7 @@ export const GameWordShooter: React.FC<GameWordShooterProps> = ({ lesson, settin
     setLockedEnemyId(null);
     setShake(false);
     enemyIdCounter.current = 0;
+    completedCharsRef.current = 0;
     if (containerRef.current) containerRef.current.focus();
   };
 
@@ -161,6 +163,7 @@ export const GameWordShooter: React.FC<GameWordShooterProps> = ({ lesson, settin
             enemiesRef.current = remaining;
             setEnemies(remaining);
             setLockedEnemyId(null);
+            completedCharsRef.current += targetEnemy.word.length;
             
             const newScore = score + 1;
             setScore(newScore);
@@ -170,8 +173,8 @@ export const GameWordShooter: React.FC<GameWordShooterProps> = ({ lesson, settin
               setIsWriting(false);
               const endTime = Date.now();
               const timeMs = endTime - (startTime || endTime);
-              const minutes = timeMs / 60000;
-              const wpm = minutes > 0 ? Math.round((newScore * 5) / minutes) : 0; // Rough estimate
+              const minutes = Math.max(timeMs / 60000, 1 / 60000);
+              const wpm = Math.round((completedCharsRef.current / 5) / minutes);
               const accuracy = Math.max(0, Math.round((newScore / (newScore + errors)) * 100)) || 100;
               onComplete({ wpm, accuracy, errors, timeMs });
             }
@@ -200,6 +203,7 @@ export const GameWordShooter: React.FC<GameWordShooterProps> = ({ lesson, settin
           enemiesRef.current = remaining;
           setEnemies(remaining);
           setLockedEnemyId(null);
+          completedCharsRef.current += targetEnemy.word.length;
           setScore(s => s + 1);
         } else {
           setEnemies(currentEnemies);

@@ -59,7 +59,8 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
     const endTime = Date.now();
     const timeMs = endTime - (startTime || endTime);
     const minutes = Math.max(timeMs / 60000, 1 / 60000);
-    const wpm = Math.round(finalScore / minutes);
+    const correctChars = Math.max(0, finalScore);
+    const wpm = Math.round((correctChars / 5) / minutes);
     const accuracy = Math.max(0, Math.round((finalScore / (finalScore + finalErrors)) * 100)) || 100;
     onComplete({ wpm, accuracy, errors: finalErrors, timeMs });
   }, [onComplete, setIsWriting, startTime]);
