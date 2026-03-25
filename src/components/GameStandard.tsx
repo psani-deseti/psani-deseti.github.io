@@ -4,6 +4,7 @@ import { Keyboard } from './Keyboard';
 import { motion, AnimatePresence } from 'motion/react';
 import { generateRandomText, generateRandomWords } from '../utils/generator';
 import { Info, CheckCircle2, Keyboard as KeyboardIcon, ArrowRight } from 'lucide-react';
+import { playErrorSound } from '../utils/gameAudio';
 
 interface GameStandardProps {
   lesson: SubLesson;
@@ -297,6 +298,7 @@ export const GameStandard: React.FC<GameStandardProps> = ({ lesson, settings, on
         }
       }
     } else {
+      playErrorSound();
       const newErrors = errors + 1;
       setErrors(newErrors);
       setShake(true);

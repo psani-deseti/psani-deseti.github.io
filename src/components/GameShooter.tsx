@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { SubLesson, Settings, GameStats } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { Play, Target, Timer, AlertCircle } from 'lucide-react';
+import { playCountdownBeep, playCorrectHitSound, playErrorSound, playStartHorn } from '../utils/gameAudio';
 
 interface GameShooterProps {
   lesson: SubLesson;
@@ -24,7 +25,8 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
   const difficulty = lesson.infiniteDifficulty || 'medium';
   const progressive = lesson.infiniteProgressive ?? true;
   const infiniteDurationSec = lesson.infiniteDurationSec ?? 120;
-  const [gameState, setGameState] = useState<'waiting' | 'playing' | 'finished'>('waiting');
+  const [gameState, setGameState] = useState<'waiting' | 'countdown' | 'playing' | 'finished'>('waiting');
+  const [countdownValue, setCountdownValue] = useState<number | null>(null);
   const [enemies, setEnemies] = useState<Enemy[]>([]);
   const [score, setScore] = useState(0);
   const [errors, setErrors] = useState(0);
@@ -35,6 +37,7 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
   const containerRef = useRef<HTMLDivElement>(null);
   const enemyIdCounter = useRef(0);
   const requestRef = useRef<number>();
+  const countdownTimeoutsRef = useRef<number[]>([]);
   const lastSpawnTime = useRef<number>(0);
   const enemiesRef = useRef<Enemy[]>([]);
   const scoreRef = useRef(0);
@@ -67,6 +70,7 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
 
   const startGame = () => {
     setGameState('playing');
+    setCountdownValue(null);
     setStartTime(Date.now());
     setIsWriting(true);
     setEnemies([]);
@@ -76,6 +80,34 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
     setShake(false);
     enemyIdCounter.current = 0;
     if (containerRef.current) containerRef.current.focus();
+  };
+
+  const clearCountdown = useCallback(() => {
+    countdownTimeoutsRef.current.forEach((timeoutId) => window.clearTimeout(timeoutId));
+    countdownTimeoutsRef.current = [];
+  }, []);
+
+  const beginCountdown = () => {
+    clearCountdown();
+    setGameState('countdown');
+    setCountdownValue(3);
+    setIsWriting(false);
+
+    [3, 2, 1].forEach((count, index) => {
+      countdownTimeoutsRef.current.push(
+        window.setTimeout(() => {
+          setCountdownValue(count);
+          playCountdownBeep(count);
+        }, index * 1000),
+      );
+    });
+
+    countdownTimeoutsRef.current.push(
+      window.setTimeout(() => {
+        playStartHorn();
+        startGame();
+      }, 3000),
+    );
   };
 
   // Handle infinite mode timer
@@ -136,6 +168,7 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
       
       const reachedBottom = newEnemies.filter(e => e.y > 100);
       if (reachedBottom.length > 0) {
+        playErrorSound();
         setErrors(err => err + reachedBottom.length);
         triggerShake();
         newEnemies = newEnemies.filter(e => e.y <= 100);
@@ -164,7 +197,28 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
     }
   }, [gameState, update, startTime]);
 
+  useEffect(() => () => {
+    clearCountdown();
+  }, [clearCountdown]);
+
+  useEffect(() => {
+    if (gameState === 'waiting' || gameState === 'countdown') {
+      containerRef.current?.focus();
+    }
+  }, [gameState]);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (gameState === 'waiting' && e.code === 'Space') {
+      e.preventDefault();
+      beginCountdown();
+      return;
+    }
+
+    if (gameState === 'countdown' && e.code === 'Space') {
+      e.preventDefault();
+      return;
+    }
+
     if (gameState !== 'playing') return;
     if (e.key.length > 1) return;
 
@@ -177,6 +231,7 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
       const remaining = enemiesRef.current.filter(en => en.id !== targetEnemy.id);
       enemiesRef.current = remaining;
       setEnemies(remaining);
+      playCorrectHitSound();
       
       const newScore = score + 1;
       setScore(newScore);
@@ -185,6 +240,7 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
         finishGame(newScore, errorsRef.current);
       }
     } else {
+      playErrorSound();
       setErrors(err => err + 1);
       triggerShake();
     }
@@ -249,7 +305,7 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
         </div>
 
         <AnimatePresence>
-          {gameState === 'waiting' && (
+          {(gameState === 'waiting' || gameState === 'countdown') && (
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -257,23 +313,34 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
               className="absolute inset-0 z-10 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
             >
               <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl border-2 border-slate-200 dark:border-slate-700 border-b-8 text-center max-w-sm mx-4">
-                <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                  <Play className="w-8 h-8 fill-current" />
-                </div>
-                <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-2">Připraveni?</h3>
-                <p className="text-slate-500 dark:text-slate-400 mb-8">
-                  {isInfinite 
-                    ? 'Sestřelte co nejvíce písmen během 2 minut. Hra se bude postupně zrychlovat!' 
-                    : `Sestřelte ${targetScore} písmen dříve, než dopadnou na zem. Hra se bude postupně zrychlovat!`
-                  }
-                </p>
-                <button
-                  onClick={startGame}
-                  className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl font-black text-xl shadow-lg shadow-blue-500/25 transition-all active:scale-95 flex items-center justify-center gap-3"
-                >
-                  <Play className="w-6 h-6 fill-current" />
-                  START
-                </button>
+                {gameState === 'countdown' ? (
+                  <>
+                    <div className="w-24 h-24 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                      <span className="text-5xl font-black tabular-nums">{countdownValue ?? 3}</span>
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-2">Připravit, pozor, ...</h3>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                      <Play className="w-8 h-8 fill-current" />
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-2">Připraveni?</h3>
+                    <p className="text-slate-500 dark:text-slate-400 mb-8">
+                      {isInfinite 
+                        ? 'Sestřelte co nejvíce písmen během 2 minut. Hra se bude postupně zrychlovat!' 
+                        : `Sestřelte ${targetScore} písmen dříve, než dopadnou na zem. Hra se bude postupně zrychlovat!`
+                      }
+                    </p>
+                    <button
+                      onClick={beginCountdown}
+                      className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-2xl font-black text-xl shadow-lg shadow-blue-500/25 transition-all active:scale-95 flex items-center justify-center gap-3"
+                    >
+                      <Play className="w-6 h-6 fill-current" />
+                      START
+                    </button>
+                  </>
+                )}
               </div>
             </motion.div>
           )}
