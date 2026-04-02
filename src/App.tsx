@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GameMode, Settings, GameStats, Category, SubLesson } from './types';
+import { GameMode, Settings, GameStats, Category, SubLesson, PracticeBundle, BundleLesson } from './types';
 import { categories } from './data/categories';
 import { perfectMessages, goodMessages, tryAgainMessages } from './data/messages';
 import { GameStandard } from './components/GameStandard';
@@ -13,7 +13,7 @@ import { Settings as SettingsIcon, Play, Target, Clock, Trophy, ArrowLeft, Rotat
 import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'motion/react';
 
-type Screen = 'menu' | 'game' | 'evaluation';
+type Screen = 'menu' | 'game' | 'evaluation' | 'bundle-summary';
 type Tab = 'path' | 'practice';
 
 type LessonStats = {
@@ -41,8 +41,20 @@ const EMPTY_LESSON_STATS = {
 
 const PRACTICE_LESSON_PREFIX = 'practice-custom-';
 
-const normalizePracticeLetters = (letters: string[]) =>
-  Array.from(new Set(letters.map((letter) => letter.toLowerCase()))).sort();
+const formatTime = (seconds: number): string => {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  
+  if (minutes === 0) {
+    return `${seconds} sekund`;
+  } else if (remainingSeconds === 0) {
+    return minutes === 1 ? '1 minuta' : `${minutes} minuty`;
+  } else {
+    const minuteText = minutes === 1 ? '1 minuta' : `${minutes} minuty`;
+    const secondText = remainingSeconds === 1 ? '1 sekunda' : `${remainingSeconds} sekund`;
+    return `${minuteText} a ${secondText}`;
+  }
+};
 
 const createPracticeKey = (settings: PracticeSettings) => {
   const normalizedLetters = normalizePracticeLetters(settings.letters);
@@ -99,6 +111,107 @@ const createPracticeLesson = (settings: PracticeSettings): { lesson: SubLesson; 
   };
 };
 
+const generatePracticeBundle = (letters: string[], duration: number): PracticeBundle => {
+  const bundleId = `bundle-${Date.now()}`;
+  const bundleLessons: BundleLesson[] = [];
+  const availableLessons = categories.flatMap(cat => cat.subLessons.filter(lesson => 
+    lesson.newLetters && lesson.newLetters.split('').some(l => letters.includes(l.toLowerCase()))
+  ));
+
+  // Determine number of exercises based on duration
+  const numExercises = duration <= 60 ? 3 : duration <= 120 ? 4 : duration <= 180 ? 5 : 6;
+
+  // Add shooter lesson
+  bundleLessons.push({
+    id: `${bundleId}-shooter`,
+    title: 'Střelba písmen',
+    lesson: {
+      id: `${bundleId}-shooter-lesson`,
+      title: 'Střelba písmen',
+      mode: 'shooter',
+      letters: letters.join(''),
+      targetScore: Math.min(100, duration), // Rough estimate
+      text: letters.join(''),
+      examples: [`${Math.min(100, duration)} bodů`],
+    },
+    mode: 'shooter',
+  });
+
+  // Add time-based typing lesson
+  bundleLessons.push({
+    id: `${bundleId}-time-typing`,
+    title: 'Psaní na čas',
+    lesson: {
+      id: `${bundleId}-time-typing-lesson`,
+      title: 'Psaní na čas',
+      mode: 'infinite',
+      letters: letters.join(''),
+      infiniteMode: 'standard',
+      infiniteDifficulty: 'medium',
+      infiniteProgressive: false,
+      infiniteDurationSec: Math.min(duration, 120), // Cap at 2 minutes
+    },
+    mode: 'infinite',
+  });
+
+  // Add random lessons from the tree if available
+  const lessonsToAdd = Math.min(numExercises - 2, availableLessons.length);
+  for (let i = 0; i < lessonsToAdd; i++) {
+    const randomLesson = availableLessons[Math.floor(Math.random() * availableLessons.length)];
+    bundleLessons.push({
+      id: `${bundleId}-tree-lesson-${i}`,
+      title: randomLesson.title,
+      lesson: randomLesson,
+      mode: randomLesson.mode || 'standard',
+    });
+  }
+
+  // Fill remaining slots with additional exercises
+  const remainingSlots = numExercises - bundleLessons.length;
+  for (let i = 0; i < remainingSlots; i++) {
+    if (Math.random() > 0.5) {
+      bundleLessons.push({
+        id: `${bundleId}-bonus-shooter-${i}`,
+        title: 'Bonus střelba',
+        lesson: {
+          id: `${bundleId}-bonus-shooter-lesson-${i}`,
+          title: 'Bonus střelba',
+          mode: 'shooter',
+          letters: letters.join(''),
+          targetScore: Math.min(50, duration / 2),
+          text: letters.join(''),
+          examples: [`${Math.min(50, duration / 2)} bodů`],
+        },
+        mode: 'shooter',
+      });
+    } else {
+      bundleLessons.push({
+        id: `${bundleId}-bonus-typing-${i}`,
+        title: 'Bonus psaní',
+        lesson: {
+          id: `${bundleId}-bonus-typing-lesson-${i}`,
+          title: 'Bonus psaní',
+          mode: 'random',
+          letters: letters.join(''),
+          pageCount: 1,
+          pageLength: Math.min(200, duration * 2),
+          max_comb: 2,
+        },
+        mode: 'random',
+      });
+    }
+  }
+
+  return {
+    id: bundleId,
+    createdAt: new Date().toISOString(),
+    letters,
+    duration,
+    lessons: bundleLessons,
+    completed: false,
+  };
+};
+
 export default function App() {
   type InfiniteRunSummary = GameStats & {
     playedAt: string;
@@ -125,6 +238,10 @@ export default function App() {
   const [practiceProgress, setPracticeProgress] = useState<Record<string, PracticeProgressSummary>>(() => {
     const saved = localStorage.getItem('ninjaPracticeProgress');
     return saved ? JSON.parse(saved) : {};
+  });
+  const [dailyPracticeSettings, setDailyPracticeSettings] = useState<{ letters: string[]; duration: number }>(() => {
+    const saved = localStorage.getItem('ninjaDailyPracticeSettings');
+    return saved ? JSON.parse(saved) : { letters: [], duration: 60 };
   });
   
   const [settings, setSettings] = useState<Settings>(() => {
@@ -165,6 +282,15 @@ export default function App() {
   const [containerWidth, setContainerWidth] = useState(0);
   const pathContainerRef = React.useRef<HTMLDivElement>(null);
 
+  // Bundle states
+  const [currentBundle, setCurrentBundle] = useState<PracticeBundle | null>(null);
+  const [currentBundleIndex, setCurrentBundleIndex] = useState(0);
+  const [bundleHistory, setBundleHistory] = useState<PracticeBundle[]>(() => {
+    const saved = localStorage.getItem('ninjaBundleHistory');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [previewBundle, setPreviewBundle] = useState<PracticeBundle | null>(null);
+
   const learnedLetters = React.useMemo(() => {
     const letters = new Set<string>();
     // Basic home row letters are always "learned" in a way, but let's stick to what's completed
@@ -179,6 +305,12 @@ export default function App() {
   }, [completedLessons]);
 
   useEffect(() => {
+    if (learnedLetters.size > 0 && dailyPracticeSettings.letters.length === 0) {
+      setDailyPracticeSettings(prev => ({ ...prev, letters: Array.from(learnedLetters) }));
+    }
+  }, [learnedLetters, dailyPracticeSettings.letters.length]);
+
+  useEffect(() => {
     if (!pathContainerRef.current) return;
     const observer = new ResizeObserver(entries => {
       for (let entry of entries) {
@@ -190,13 +322,8 @@ export default function App() {
   }, [currentTab]);
 
   useEffect(() => {
-    if (selectedCategory) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => { document.body.style.overflow = 'unset'; };
-  }, [selectedCategory]);
+    localStorage.setItem('ninjaDailyPracticeSettings', JSON.stringify(dailyPracticeSettings));
+  }, [dailyPracticeSettings]);
 
   useEffect(() => {
     localStorage.setItem('ninjaSettings', JSON.stringify(settings));
@@ -436,6 +563,29 @@ export default function App() {
     setStats(null);
     setScreen('game');
   };
+
+  const startDailyPractice = () => {
+    if (dailyPracticeSettings.letters.length === 0) return;
+    
+    const bundle = generatePracticeBundle(dailyPracticeSettings.letters, dailyPracticeSettings.duration);
+    setPreviewBundle(bundle);
+  };
+
+  const startBundlePractice = () => {
+    if (!previewBundle) return;
+    
+    setCurrentBundle(previewBundle);
+    setCurrentBundleIndex(0);
+    setPreviewBundle(null);
+    
+    // Start first lesson
+    const firstLesson = previewBundle.lessons[0];
+    setSelectedLesson(firstLesson.lesson);
+    setSelectedMode(firstLesson.mode);
+    setSelectedCategory(null);
+    setStats(null);
+    setScreen('game');
+  };
   const startPracticeGame = () => {
     if (selectedMode === 'infinite') {
       const categoryLetters = (selectedLessonCategory?.subLessons || [])
@@ -474,6 +624,61 @@ export default function App() {
     } else {
       setScreen('menu');
     }
+  };
+
+  const handleBundleNextLesson = () => {
+    if (!currentBundle || !stats) return;
+
+    // Update current lesson with stats
+    const updatedBundle = { ...currentBundle };
+    updatedBundle.lessons[currentBundleIndex].completed = true;
+    updatedBundle.lessons[currentBundleIndex].stats = stats;
+    setCurrentBundle(updatedBundle);
+
+    const nextIndex = currentBundleIndex + 1;
+    if (nextIndex < currentBundle.lessons.length) {
+      // Start next lesson
+      setCurrentBundleIndex(nextIndex);
+      const nextLesson = currentBundle.lessons[nextIndex];
+      setSelectedLesson(nextLesson.lesson);
+      setSelectedMode(nextLesson.mode);
+      setStats(null);
+      setScreen('game');
+    } else {
+      // Bundle completed
+      finishBundle(updatedBundle);
+    }
+  };
+
+  const finishBundle = (bundle: PracticeBundle) => {
+    const completedBundle = {
+      ...bundle,
+      completed: true,
+      overallStats: {
+        totalTime: bundle.lessons.reduce((sum, lesson) => sum + (lesson.stats?.timeMs || 0), 0),
+        averageWpm: bundle.lessons.reduce((sum, lesson) => sum + (lesson.stats?.wpm || 0), 0) / bundle.lessons.length,
+        averageAccuracy: bundle.lessons.reduce((sum, lesson) => sum + (lesson.stats?.accuracy || 0), 0) / bundle.lessons.length,
+        totalErrors: bundle.lessons.reduce((sum, lesson) => sum + (lesson.stats?.errors || 0), 0),
+      }
+    };
+
+    // Save to history
+    const newHistory = [completedBundle, ...bundleHistory];
+    setBundleHistory(newHistory);
+    localStorage.setItem('ninjaBundleHistory', JSON.stringify(newHistory));
+
+    setCurrentBundle(completedBundle);
+    setScreen('bundle-summary');
+  };
+
+  const handleBundleRestart = () => {
+    if (!currentBundle) return;
+    setCurrentBundleIndex(0);
+    const firstLesson = currentBundle.lessons[0];
+    setSelectedLesson(firstLesson.lesson);
+    setSelectedMode(firstLesson.mode);
+    setStats(null);
+    setScreen('game');
   };
 
   const handleBackToMenu = () => {
@@ -605,6 +810,15 @@ export default function App() {
               >
                 <Dumbbell className="w-5 h-5" />
                 <span className="hidden sm:inline">Trénink</span>
+              </button>
+              <button
+                onClick={() => setCurrentTab('daily')}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl font-bold transition-all ${
+                  currentTab === 'daily' ? 'bg-white dark:bg-slate-700 text-blue-500 dark:text-blue-400 shadow-sm border-2 border-slate-200 dark:border-slate-600' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 border-2 border-transparent'
+                }`}
+              >
+                <Clock className="w-5 h-5" />
+                <span className="hidden sm:inline">Denní</span>
               </button>
             </div>
             <button 
@@ -1163,7 +1377,294 @@ export default function App() {
                   </>
                   )}
                 </motion.div>
-              )}              {currentTab === 'help' && (
+              )}
+
+              {currentTab === 'daily' && (
+                <motion.div 
+                  key="daily"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-8"
+                >
+                  <div className="rounded-[1.75rem] border border-slate-200 bg-gradient-to-br from-emerald-50 to-blue-50 p-6 shadow-[0_25px_60px_-50px_rgba(15,23,42,0.8)] dark:border-slate-700 dark:from-emerald-950/20 dark:to-blue-950/20 sm:p-8">
+                    <div className="flex flex-col gap-6">
+                      <div className="max-w-2xl">
+                        <div className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-4 py-2 text-sm font-black uppercase tracking-[0.18em] text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
+                          <Clock className="h-4 w-4" />
+                          Dailz Practice
+                        </div>
+                        <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-900 dark:text-slate-50 sm:text-4xl">
+                          Vytvoř svůj tréninkový balíček
+                        </h2>
+                        <p className="mt-3 text-base font-medium leading-relaxed text-slate-600 dark:text-slate-300">
+                          Vyber písmena, která chceš procvičit, a nastav délku tréninku. Systém automaticky vytvoří balíček cvičení přizpůsobený tvým potřebám.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <div className="rounded-2xl border border-slate-200 bg-white/80 px-6 py-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/80">
+                          <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-400">Vybráno písmen</div>
+                          <div className="mt-2 text-3xl font-black text-slate-900 dark:text-slate-50">{dailyPracticeSettings.letters.length}</div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white/80 px-6 py-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/80">
+                          <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-400">Délka tréninku</div>
+                          <div className="mt-2 text-xl font-black text-slate-900 dark:text-slate-50">
+                            {formatTime(dailyPracticeSettings.duration)}
+                          </div>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white/80 px-6 py-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/80">
+                          <div className="text-sm font-black uppercase tracking-[0.18em] text-slate-400">Počet cvičení</div>
+                          <div className="mt-2 text-3xl font-black text-slate-900 dark:text-slate-50">
+                            {dailyPracticeSettings.duration <= 60 ? '3' : dailyPracticeSettings.duration <= 120 ? '4' : dailyPracticeSettings.duration <= 180 ? '5' : '6'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_25px_60px_-50px_rgba(15,23,42,0.8)] dark:border-slate-700 dark:bg-slate-800 sm:p-6">
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-black text-slate-900 dark:text-slate-100">1. Vyber písmena</h3>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setDailyPracticeSettings(prev => ({ ...prev, letters: Array.from(learnedLetters) }))}
+                          className="px-4 py-2 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 transition-colors"
+                        >
+                          Reset na naučená
+                        </button>
+                      </div>
+                      <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/40 sm:p-4">
+                        <div className="flex justify-end mb-3">
+                          <button
+                            onClick={() => setDailyPracticeSettings(prev => ({ ...prev, letters: Array.from(learnedLetters) }))}
+                            className="flex items-center gap-2 px-3 py-2 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 transition-colors text-sm"
+                            title="Resetovat na naučená písmena"
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                            Reset
+                          </button>
+                        </div>
+                        <Keyboard
+                          activeChar=""
+                          showAllColors={false}
+                          learnedLetters={new Set()}
+                          onKeyClick={(key) => {
+                            setDailyPracticeSettings(prev => {
+                              const letters = [...prev.letters];
+                              const index = letters.indexOf(key);
+                              if (index > -1) {
+                                letters.splice(index, 1);
+                              } else {
+                                letters.push(key);
+                              }
+                              return { ...prev, letters: letters.sort() };
+                            });
+                          }}
+                          selectedLetters={new Set(dailyPracticeSettings.letters)}
+                        />
+                      </div>
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+                        {dailyPracticeSettings.letters.length > 0
+                          ? `Vybraná písmena: ${dailyPracticeSettings.letters.join(' ')}`
+                          : 'Vyber aspoň jedno písmeno.'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-[0_25px_60px_-50px_rgba(15,23,42,0.8)] dark:border-slate-700 dark:bg-slate-800">
+                    <div className="space-y-4">
+                      <h3 className="text-xl font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-emerald-500" />
+                        2. Nastav délku
+                      </h3>
+                      <div className="space-y-2 max-h-80 overflow-y-auto">
+                        {[30, 60, 90, 120, 150, 180, 210, 240, 270, 300].map((time) => (
+                          <button
+                            key={time}
+                            onClick={() => setDailyPracticeSettings(prev => ({ ...prev, duration: time }))}
+                            className={`w-full rounded-xl border-2 p-4 text-left transition-all hover:translate-y-[1px] ${
+                              dailyPracticeSettings.duration === time
+                                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 shadow-md'
+                                : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 hover:bg-white dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-sm'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="font-bold text-slate-800 dark:text-slate-100 text-lg">{formatTime(time)}</div>
+                                <div className="text-sm text-slate-500 dark:text-slate-400">
+                                  {time <= 60 ? '3 cvičení' : time <= 120 ? '4 cvičení' : time <= 180 ? '5 cvičení' : '6 cvičení'}
+                                </div>
+                              </div>
+                              {dailyPracticeSettings.duration === time && (
+                                <div className="rounded-full bg-emerald-500 p-1.5">
+                                  <CheckCircle2 className="w-5 h-5 text-white" />
+                                </div>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.75rem] border border-slate-200 bg-gradient-to-r from-emerald-500 to-blue-500 p-6 shadow-[0_25px_60px_-50px_rgba(15,23,42,0.8)] dark:border-slate-700">
+                    <div className="text-center space-y-4">
+                      <h3 className="text-xl font-black text-white flex items-center justify-center gap-2">
+                        <Play className="w-6 h-6" />
+                        3. Spusť trénink
+                      </h3>
+                      <p className="text-white/90 text-base font-medium">
+                        {dailyPracticeSettings.letters.length > 0
+                          ? `Vygeneruje balíček ${dailyPracticeSettings.duration <= 60 ? '3' : dailyPracticeSettings.duration <= 120 ? '4' : dailyPracticeSettings.duration <= 180 ? '5' : '6'} cvičení pro procvičení písmen ${dailyPracticeSettings.letters.join(', ')} na ${formatTime(dailyPracticeSettings.duration).toLowerCase()}.`
+                          : 'Bez vybraných písmen balíček nevygeneruješ.'}
+                      </p>
+                      <button
+                        onClick={startDailyPractice}
+                        disabled={dailyPracticeSettings.letters.length === 0}
+                        className="inline-flex items-center justify-center gap-3 rounded-[1.25rem] bg-white px-8 py-4 text-lg font-black text-emerald-600 border-b-[6px] border-white/30 transition-all hover:bg-slate-50 hover:translate-y-[2px] hover:border-b-[4px] active:translate-y-[6px] active:border-b-0 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                      >
+                        <Play className="h-6 w-6 fill-current" />
+                        Vygenerovat balíček
+                      </button>
+                    </div>
+                  </div>
+
+                  {previewBundle && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_25px_60px_-50px_rgba(15,23,42,0.8)] dark:border-slate-700 dark:bg-slate-800 sm:p-6"
+                    >
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-black text-slate-900 dark:text-slate-100">Vygenerovaný balíček</h3>
+                        <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                          Balíček obsahuje {previewBundle.lessons.length} lekcí pro procvičení písmen {previewBundle.letters.join(', ')}.
+                        </p>
+                        
+                        <div className="space-y-3">
+                          {previewBundle.lessons.map((lesson, index) => (
+                            <div key={lesson.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-600">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold">
+                                  {index + 1}
+                                </div>
+                                <div>
+                                  <div className="font-bold text-slate-800 dark:text-slate-100">{lesson.title}</div>
+                                  <div className="text-sm text-slate-500 dark:text-slate-400">
+                                    {lesson.mode === 'shooter' ? 'Střelba písmen' : lesson.mode === 'infinite' ? 'Psaní na čas' : 'Psaní textu'}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => setPreviewBundle(null)}
+                            className="flex-1 px-6 py-3 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                          >
+                            Zpět
+                          </button>
+                          <button
+                            onClick={startBundlePractice}
+                            className="flex-1 px-6 py-3 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <Play className="h-5 w-5 fill-current" />
+                            Spustit balíček
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {bundleHistory.length > 0 && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-[0_25px_60px_-50px_rgba(15,23,42,0.8)] dark:border-slate-700 dark:bg-slate-800 sm:p-6"
+                    >
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-black text-slate-900 dark:text-slate-100">Historie balíčků</h3>
+                        
+                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                          {bundleHistory.slice(0, 10).map((bundle) => (
+                            <div key={bundle.id} className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-600">
+                              <div className="flex items-start justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center text-sm font-bold">
+                                    ✓
+                                  </div>
+                                  <div>
+                                    <div className="font-bold text-slate-800 dark:text-slate-100">
+                                      Balíček z {new Date(bundle.createdAt).toLocaleDateString('cs-CZ')}
+                                    </div>
+                                    <div className="text-sm text-slate-500 dark:text-slate-400">
+                                      {bundle.lessons.length} lekcí · {bundle.letters.join('')} · {formatTime(Math.round((bundle.overallStats?.totalTime || 0) / 1000)).toLowerCase()}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setCurrentBundle(bundle);
+                                      setCurrentBundleIndex(0);
+                                      const firstLesson = bundle.lessons[0];
+                                      setSelectedLesson(firstLesson.lesson);
+                                      setSelectedMode(firstLesson.mode);
+                                      setStats(null);
+                                      setScreen('game');
+                                    }}
+                                    className="p-2 text-blue-500 hover:text-blue-600 transition-colors"
+                                    title="Opakovat balíček"
+                                  >
+                                    <RotateCcw className="w-5 h-5" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setBundleHistory(prev => prev.filter(b => b.id !== bundle.id));
+                                      localStorage.setItem('ninjaBundleHistory', JSON.stringify(bundleHistory.filter(b => b.id !== bundle.id)));
+                                    }}
+                                    className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                                    title="Smazat z historie"
+                                  >
+                                    <X className="w-5 h-5" />
+                                  </button>
+                                </div>
+                              </div>
+                              
+                              {bundle.overallStats && (
+                                <div className="grid grid-cols-4 gap-3 text-center">
+                                  <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                                    <div className="text-xs font-bold text-slate-400 uppercase">WPM</div>
+                                    <div className="text-lg font-bold text-blue-500">{Math.round(bundle.overallStats.averageWpm)}</div>
+                                  </div>
+                                  <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                                    <div className="text-xs font-bold text-slate-400 uppercase">Přesnost</div>
+                                    <div className="text-lg font-bold text-green-500">{Math.round(bundle.overallStats.averageAccuracy)}%</div>
+                                  </div>
+                                  <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                                    <div className="text-xs font-bold text-slate-400 uppercase">Čas</div>
+                                    <div className="text-lg font-bold text-purple-500">{Math.round(bundle.overallStats.totalTime / 1000)}s</div>
+                                  </div>
+                                  <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                                    <div className="text-xs font-bold text-slate-400 uppercase">Chyby</div>
+                                    <div className="text-lg font-bold text-red-500">{bundle.overallStats.totalErrors}</div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </motion.div>
+              )}
+
+              {currentTab === 'help' && (
                 <motion.div 
                   key="help"
                   initial={{ opacity: 0, x: -20 }}
@@ -1361,6 +1862,176 @@ export default function App() {
                 transition={{ delay: 1.8 }}
                 className="flex flex-col sm:flex-row justify-center gap-4 mt-12"
               >
+                {currentBundle ? (
+                  <>
+                    <button
+                      onClick={handleBackToMenu}
+                      className="px-8 py-4 bg-white dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 border-b-4 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-200 rounded-2xl font-extrabold text-lg transition-all hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0"
+                    >
+                      Zpět do menu
+                    </button>
+                    <button
+                      onClick={handleBundleRestart}
+                      className="px-8 py-4 bg-white dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 border-b-4 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-200 rounded-2xl font-extrabold text-lg transition-all hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0 flex items-center justify-center gap-2"
+                    >
+                      <RotateCcw className="w-6 h-6" />
+                      Znovu balíček
+                    </button>
+                    {currentBundleIndex < currentBundle.lessons.length - 1 ? (
+                      <button
+                        onClick={handleBundleNextLesson}
+                        className="px-8 py-4 bg-blue-500 border-b-4 border-blue-600 hover:bg-blue-400 text-white rounded-2xl font-extrabold text-lg transition-all flex items-center justify-center gap-2 hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0"
+                      >
+                        DALŠÍ LEKCE
+                        <ArrowRight className="w-6 h-6" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleBundleNextLesson}
+                        className="px-8 py-4 bg-emerald-500 border-b-4 border-emerald-600 hover:bg-emerald-400 text-white rounded-2xl font-extrabold text-lg transition-all flex items-center justify-center gap-2 hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0"
+                      >
+                        DOKONČIT BALÍČEK
+                        <CheckCircle2 className="w-6 h-6" />
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleBackToMenu}
+                      className="px-8 py-4 bg-white dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 border-b-4 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-200 rounded-2xl font-extrabold text-lg transition-all hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0"
+                    >
+                      Zpět do menu
+                    </button>
+                    <button
+                      onClick={startGame}
+                      className="px-8 py-4 bg-white dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 border-b-4 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-200 rounded-2xl font-extrabold text-lg transition-all hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0 flex items-center justify-center gap-2"
+                    >
+                      <RotateCcw className="w-6 h-6" />
+                      Znovu
+                    </button>
+                    {!isCustomPracticeLesson && nextLesson && (
+                      <button
+                        onClick={handleNextLesson}
+                        className="px-8 py-4 bg-blue-500 border-b-4 border-blue-600 hover:bg-blue-400 text-white rounded-2xl font-extrabold text-lg transition-all flex items-center justify-center gap-2 hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0"
+                      >
+                        DALŠÍ
+                        <ArrowRight className="w-6 h-6" />
+                      </button>
+                    )}
+                  </>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+
+          {screen === 'bundle-summary' && currentBundle && currentBundle.overallStats && (
+            <motion.div 
+              key="bundle-summary"
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="max-w-4xl mx-auto mt-12 text-center space-y-8 bg-white dark:bg-slate-800 p-8 rounded-3xl border-2 border-slate-200 dark:border-slate-700 border-b-8"
+            >
+              <div className="flex justify-center gap-4 mb-8">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0, rotate: -180 }}
+                  animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                  transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.5 }}
+                >
+                  <Trophy className="w-20 h-20 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_15px_rgba(250,204,21,0.5)]" />
+                </motion.div>
+              </div>
+              
+              <motion.h2 
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.8, type: "spring" }}
+                className="text-4xl font-extrabold text-slate-800 dark:text-slate-100"
+              >
+                Balíček dokončen!
+              </motion.h2>
+              <p className="text-xl font-medium text-slate-500 dark:text-slate-400">
+                Skvělá práce! Dokončil jsi všechny lekce v balíčku.
+              </p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-6 mt-8">
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1.0 }}
+                  className="bg-blue-50 dark:bg-blue-900/20 p-6 rounded-3xl border-2 border-blue-200 dark:border-blue-800/50 border-b-4"
+                >
+                  <div className="text-blue-600 dark:text-blue-400 font-bold mb-2 uppercase tracking-wider text-sm">Celkový čas</div>
+                  <div className="text-3xl font-extrabold text-blue-500">{Math.round(currentBundle.overallStats.totalTime / 1000)} <span className="text-lg text-blue-400">sek</span></div>
+                </motion.div>
+                
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1.1 }}
+                  className="bg-green-50 dark:bg-green-900/20 p-6 rounded-3xl border-2 border-green-200 dark:border-green-800/50 border-b-4"
+                >
+                  <div className="text-green-600 dark:text-green-400 font-bold mb-2 uppercase tracking-wider text-sm">Průměrná přesnost</div>
+                  <div className="text-3xl font-extrabold text-green-500">{Math.round(currentBundle.overallStats.averageAccuracy)}%</div>
+                </motion.div>
+                
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1.2 }}
+                  className="bg-purple-50 dark:bg-purple-900/20 p-6 rounded-3xl border-2 border-purple-200 dark:border-purple-800/50 border-b-4"
+                >
+                  <div className="text-purple-600 dark:text-purple-400 font-bold mb-2 uppercase tracking-wider text-sm">Průměrná rychlost</div>
+                  <div className="text-3xl font-extrabold text-purple-500">{Math.round(currentBundle.overallStats.averageWpm)} <span className="text-lg text-purple-400">WPM</span></div>
+                </motion.div>
+
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1.3 }}
+                  className="bg-red-50 dark:bg-red-900/20 p-6 rounded-3xl border-2 border-red-200 dark:border-red-800/50 border-b-4"
+                >
+                  <div className="text-red-600 dark:text-red-400 font-bold mb-2 uppercase tracking-wider text-sm">Celkové chyby</div>
+                  <div className="text-3xl font-extrabold text-red-500">{currentBundle.overallStats.totalErrors}</div>
+                </motion.div>
+              </div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.4 }}
+                className="rounded-3xl border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 p-6 text-left"
+              >
+                <div className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Lekce v balíčku</div>
+                <div className="mt-4 space-y-3">
+                  {currentBundle.lessons.map((lesson, index) => (
+                    <div key={lesson.id} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-600">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                          lesson.completed ? 'bg-green-500 text-white' : 'bg-slate-300 dark:bg-slate-600 text-slate-600 dark:text-slate-300'
+                        }`}>
+                          {lesson.completed ? <CheckCircle2 className="w-4 h-4" /> : index + 1}
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-800 dark:text-slate-100">{lesson.title}</div>
+                          {lesson.stats && (
+                            <div className="text-sm text-slate-500 dark:text-slate-400">
+                              {lesson.stats.wpm} WPM · {lesson.stats.accuracy}% · {Math.round(lesson.stats.timeMs / 1000)}s
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 1.5 }}
+                className="flex flex-col sm:flex-row justify-center gap-4 mt-12"
+              >
                 <button
                   onClick={handleBackToMenu}
                   className="px-8 py-4 bg-white dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 border-b-4 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-200 rounded-2xl font-extrabold text-lg transition-all hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0"
@@ -1368,21 +2039,12 @@ export default function App() {
                   Zpět do menu
                 </button>
                 <button
-                  onClick={startGame}
-                  className="px-8 py-4 bg-white dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 border-b-4 hover:bg-slate-50 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-200 rounded-2xl font-extrabold text-lg transition-all hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0 flex items-center justify-center gap-2"
+                  onClick={handleBundleRestart}
+                  className="px-8 py-4 bg-blue-500 border-b-4 border-blue-600 hover:bg-blue-400 text-white rounded-2xl font-extrabold text-lg transition-all flex items-center justify-center gap-2 hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0"
                 >
                   <RotateCcw className="w-6 h-6" />
-                  Znovu
+                  Znovu balíček
                 </button>
-                {!isCustomPracticeLesson && nextLesson && (
-                  <button
-                    onClick={handleNextLesson}
-                    className="px-8 py-4 bg-blue-500 border-b-4 border-blue-600 hover:bg-blue-400 text-white rounded-2xl font-extrabold text-lg transition-all flex items-center justify-center gap-2 hover:translate-y-[2px] hover:border-b-2 active:translate-y-[4px] active:border-b-0"
-                  >
-                    DALŠÍ
-                    <ArrowRight className="w-6 h-6" />
-                  </button>
-                )}
               </motion.div>
             </motion.div>
           )}

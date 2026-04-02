@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Clock3, Crosshair, Keyboard as KeyboardIcon, Play, Type } from 'lucide-react';
+import { Clock3, Crosshair, Keyboard as KeyboardIcon, Play, Type, RotateCcw } from 'lucide-react';
 import { Keyboard } from './Keyboard';
 
 export interface PracticeSettings {
@@ -138,6 +138,16 @@ export const PracticeHub: React.FC<PracticeHubProps> = ({ onStartPractice, learn
           </div>
 
           <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-700 dark:bg-slate-900/40 sm:p-4">
+            <div className="flex justify-end mb-3">
+              <button
+                onClick={() => setSelectedKeys(new Set(Array.from(learnedLetters || new Set()).map((letter) => String(letter).toLowerCase())))}
+                className="flex items-center gap-2 px-3 py-2 bg-blue-500 text-white rounded-lg font-bold hover:bg-blue-600 transition-colors text-sm"
+                title="Resetovat na naučená písmena"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Reset
+              </button>
+            </div>
             <Keyboard
               activeChar=""
               showAllColors={false}

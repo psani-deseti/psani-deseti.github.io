@@ -51,3 +51,27 @@ export interface GameStats {
   errors: number;
   timeMs: number;
 }
+
+export interface BundleLesson {
+  id: string;
+  title: string;
+  lesson: SubLesson;
+  mode: GameMode;
+  completed?: boolean;
+  stats?: GameStats;
+}
+
+export interface PracticeBundle {
+  id: string;
+  createdAt: string;
+  letters: string[];
+  duration: number; // estimated total time
+  lessons: BundleLesson[];
+  completed: boolean;
+  overallStats?: {
+    totalTime: number;
+    averageWpm: number;
+    averageAccuracy: number;
+    totalErrors: number;
+  };
+}
