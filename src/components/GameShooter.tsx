@@ -10,6 +10,7 @@ interface GameShooterProps {
   onComplete: (stats: GameStats) => void;
   onCancel?: () => void;
   setIsWriting: (isWriting: boolean) => void;
+  bundleMistakes?: number;
 }
 
 interface Enemy {
@@ -20,7 +21,7 @@ interface Enemy {
   speed: number;
 }
 
-export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onComplete, onCancel, setIsWriting }) => {
+export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onComplete, onCancel, setIsWriting, bundleMistakes = 0 }) => {
   const isInfinite = lesson.mode === 'infinite';
   const difficulty = lesson.infiniteDifficulty || 'medium';
   const progressive = lesson.infiniteProgressive ?? true;
@@ -129,14 +130,16 @@ export const GameShooter: React.FC<GameShooterProps> = ({ lesson, settings, onCo
     const currentErrors = errorsRef.current;
     const difficultyMultiplier = settings.shooterDifficulty === 'hard' ? 1.5 : settings.shooterDifficulty === 'easy' ? 0.7 : 1;
     
-    // Acceleration over time and score
+    // Bundle difficulty scaling: increase difficulty based on mistakes in previous bundle lessons
+    const bundleDifficultyMultiplier = 1 + (bundleMistakes * 0.1); // 10% harder for each mistake
+    
     const timeFactor = (Date.now() - (startTime || Date.now())) / 60000; // minutes passed
     const performanceFactor = currentScore / targetScore;
     
     const speedBase = 0.2 + (timeFactor * 0.2) + (performanceFactor * 0.3);
-    const speedMultiplier = speedBase * difficultyMultiplier;
+    const speedMultiplier = speedBase * difficultyMultiplier * bundleDifficultyMultiplier;
     
-    const spawnInterval = Math.max(400, 1200 - (performanceFactor * 600) - (timeFactor * 400)) / difficultyMultiplier;
+    const spawnInterval = Math.max(400, 1200 - (performanceFactor * 600) - (timeFactor * 400)) / (difficultyMultiplier * bundleDifficultyMultiplier);
 
     let newEnemies = [...enemiesRef.current];
     let shouldUpdate = false;

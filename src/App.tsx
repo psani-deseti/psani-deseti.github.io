@@ -111,7 +111,7 @@ const createPracticeLesson = (settings: PracticeSettings): { lesson: SubLesson; 
   };
 };
 
-const generatePracticeBundle = (letters: string[], duration: number): PracticeBundle => {
+const generatePracticeBundle = (letters: string[], duration: number, settings?: typeof dailyPracticeSettings): PracticeBundle => {
   const bundleId = `bundle-${Date.now()}`;
   const bundleLessons: BundleLesson[] = [];
   const availableLessons = categories.flatMap(cat => cat.subLessons.filter(lesson => 
@@ -121,85 +121,79 @@ const generatePracticeBundle = (letters: string[], duration: number): PracticeBu
   // Determine number of exercises based on duration
   const numExercises = duration <= 60 ? 3 : duration <= 120 ? 4 : duration <= 180 ? 5 : 6;
 
-  // Add shooter lesson
-  bundleLessons.push({
-    id: `${bundleId}-shooter`,
-    title: 'Střelba písmen',
-    lesson: {
-      id: `${bundleId}-shooter-lesson`,
-      title: 'Střelba písmen',
-      mode: 'shooter',
-      letters: letters.join(''),
-      targetScore: Math.min(100, duration), // Rough estimate
-      text: letters.join(''),
-      examples: [`${Math.min(100, duration)} bodů`],
-    },
-    mode: 'shooter',
-  });
+  // Create a list of available lesson types based on preferences
+  const availableTypes: string[] = [];
+  if (!settings || settings.includeShooter) availableTypes.push('shooter');
+  if (!settings || settings.includeTyping) availableTypes.push('typing');
+  if (!settings || settings.includeTree) availableTypes.push('tree');
 
-  // Add time-based typing lesson
-  bundleLessons.push({
-    id: `${bundleId}-time-typing`,
-    title: 'Psaní na čas',
-    lesson: {
-      id: `${bundleId}-time-typing-lesson`,
-      title: 'Psaní na čas',
-      mode: 'infinite',
-      letters: letters.join(''),
-      infiniteMode: 'standard',
-      infiniteDifficulty: 'medium',
-      infiniteProgressive: false,
-      infiniteDurationSec: Math.min(duration, 120), // Cap at 2 minutes
-    },
-    mode: 'infinite',
-  });
-
-  // Add random lessons from the tree if available
-  const lessonsToAdd = Math.min(numExercises - 2, availableLessons.length);
-  for (let i = 0; i < lessonsToAdd; i++) {
-    const randomLesson = availableLessons[Math.floor(Math.random() * availableLessons.length)];
-    bundleLessons.push({
-      id: `${bundleId}-tree-lesson-${i}`,
-      title: randomLesson.title,
-      lesson: randomLesson,
-      mode: randomLesson.mode || 'standard',
-    });
+  // If no types selected or no settings provided, default to all
+  if (availableTypes.length === 0) {
+    availableTypes.push('shooter', 'typing', 'tree');
   }
 
-  // Fill remaining slots with additional exercises
-  const remainingSlots = numExercises - bundleLessons.length;
-  for (let i = 0; i < remainingSlots; i++) {
-    if (Math.random() > 0.5) {
+  // Generate lessons based on preferences
+  for (let i = 0; i < numExercises; i++) {
+    const lessonType = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+    
+    if (lessonType === 'shooter') {
       bundleLessons.push({
-        id: `${bundleId}-bonus-shooter-${i}`,
-        title: 'Bonus střelba',
+        id: `${bundleId}-shooter-${i}`,
+        title: 'Střelba písmen',
         lesson: {
-          id: `${bundleId}-bonus-shooter-lesson-${i}`,
-          title: 'Bonus střelba',
+          id: `${bundleId}-shooter-lesson-${i}`,
+          title: 'Střelba písmen',
           mode: 'shooter',
           letters: letters.join(''),
-          targetScore: Math.min(50, duration / 2),
+          targetScore: Math.min(100, duration), // Rough estimate
           text: letters.join(''),
-          examples: [`${Math.min(50, duration / 2)} bodů`],
+          examples: [`${Math.min(100, duration)} bodů`],
         },
         mode: 'shooter',
       });
-    } else {
+    } else if (lessonType === 'typing') {
       bundleLessons.push({
-        id: `${bundleId}-bonus-typing-${i}`,
-        title: 'Bonus psaní',
+        id: `${bundleId}-typing-${i}`,
+        title: 'Psaní na čas',
         lesson: {
-          id: `${bundleId}-bonus-typing-lesson-${i}`,
-          title: 'Bonus psaní',
-          mode: 'random',
+          id: `${bundleId}-typing-lesson-${i}`,
+          title: 'Psaní na čas',
+          mode: 'infinite',
           letters: letters.join(''),
-          pageCount: 1,
-          pageLength: Math.min(200, duration * 2),
-          max_comb: 2,
+          infiniteMode: 'standard',
+          infiniteDifficulty: 'medium',
+          infiniteProgressive: false,
+          infiniteDurationSec: Math.min(duration, 120), // Cap at 2 minutes
         },
-        mode: 'random',
+        mode: 'infinite',
+      });
+    } else if (lessonType === 'tree' && availableLessons.length > 0) {
+      const randomLesson = availableLessons[Math.floor(Math.random() * availableLessons.length)];
+      bundleLessons.push({
+        id: `${bundleId}-tree-lesson-${i}`,
+        title: randomLesson.title,
+        lesson: randomLesson,
+        mode: randomLesson.mode || 'standard',
       });
     }
+  }
+
+  // Ensure we have at least one lesson
+  if (bundleLessons.length === 0) {
+    bundleLessons.push({
+      id: `${bundleId}-fallback-shooter`,
+      title: 'Střelba písmen',
+      lesson: {
+        id: `${bundleId}-fallback-shooter-lesson`,
+        title: 'Střelba písmen',
+        mode: 'shooter',
+        letters: letters.join(''),
+        targetScore: Math.min(100, duration),
+        text: letters.join(''),
+        examples: [`${Math.min(100, duration)} bodů`],
+      },
+      mode: 'shooter',
+    });
   }
 
   return {
@@ -239,9 +233,22 @@ export default function App() {
     const saved = localStorage.getItem('ninjaPracticeProgress');
     return saved ? JSON.parse(saved) : {};
   });
-  const [dailyPracticeSettings, setDailyPracticeSettings] = useState<{ letters: string[]; duration: number }>(() => {
+  const [dailyPracticeSettings, setDailyPracticeSettings] = useState<{ 
+    letters: string[]; 
+    duration: number;
+    includeShooter: boolean;
+    includeTyping: boolean;
+    includeTree: boolean;
+  }>(() => {
     const saved = localStorage.getItem('ninjaDailyPracticeSettings');
-    return saved ? JSON.parse(saved) : { letters: [], duration: 60 };
+    const parsed = saved ? JSON.parse(saved) : {};
+    return { 
+      letters: parsed.letters || [], 
+      duration: parsed.duration || 60,
+      includeShooter: parsed.includeShooter ?? true,
+      includeTyping: parsed.includeTyping ?? true,
+      includeTree: parsed.includeTree ?? true,
+    };
   });
   
   const [settings, setSettings] = useState<Settings>(() => {
@@ -567,7 +574,7 @@ export default function App() {
   const startDailyPractice = () => {
     if (dailyPracticeSettings.letters.length === 0) return;
     
-    const bundle = generatePracticeBundle(dailyPracticeSettings.letters, dailyPracticeSettings.duration);
+    const bundle = generatePracticeBundle(dailyPracticeSettings.letters, dailyPracticeSettings.duration, dailyPracticeSettings);
     setPreviewBundle(bundle);
   };
 
@@ -586,6 +593,153 @@ export default function App() {
     setStats(null);
     setScreen('game');
   };
+
+  const rerollBundleLesson = (lessonIndex: number) => {
+    if (!previewBundle) return;
+    
+    const updatedBundle = { ...previewBundle };
+    const currentLesson = updatedBundle.lessons[lessonIndex];
+    
+    // Generate a new lesson based on the type
+    let newLesson: BundleLesson;
+    
+    if (currentLesson.mode === 'shooter') {
+      newLesson = {
+        id: `${previewBundle.id}-reroll-shooter-${Date.now()}`,
+        title: 'Střelba písmen',
+        lesson: {
+          id: `${previewBundle.id}-reroll-shooter-lesson-${Date.now()}`,
+          title: 'Střelba písmen',
+          mode: 'shooter',
+          letters: previewBundle.letters.join(''),
+          targetScore: Math.min(100, previewBundle.duration),
+          text: previewBundle.letters.join(''),
+          examples: [`${Math.min(100, previewBundle.duration)} bodů`],
+        },
+        mode: 'shooter',
+      };
+    } else if (currentLesson.mode === 'infinite') {
+      newLesson = {
+        id: `${previewBundle.id}-reroll-typing-${Date.now()}`,
+        title: 'Psaní na čas',
+        lesson: {
+          id: `${previewBundle.id}-reroll-typing-lesson-${Date.now()}`,
+          title: 'Psaní na čas',
+          mode: 'infinite',
+          letters: previewBundle.letters.join(''),
+          infiniteMode: 'standard',
+          infiniteDifficulty: 'medium',
+          infiniteProgressive: false,
+          infiniteDurationSec: Math.min(previewBundle.duration, 120),
+        },
+        mode: 'infinite',
+      };
+    } else {
+      // For tree lessons or random lessons, pick a different one
+      const availableLessons = categories.flatMap(cat => cat.subLessons.filter(lesson => 
+        lesson.newLetters && lesson.newLetters.split('').some(l => previewBundle.letters.includes(l.toLowerCase()))
+      )).filter(lesson => lesson.id !== currentLesson.lesson.id);
+      
+      if (availableLessons.length > 0) {
+        const randomLesson = availableLessons[Math.floor(Math.random() * availableLessons.length)];
+        newLesson = {
+          id: `${previewBundle.id}-reroll-tree-${Date.now()}`,
+          title: randomLesson.title,
+          lesson: randomLesson,
+          mode: randomLesson.mode || 'standard',
+        };
+      } else {
+        // Fallback to random mode lesson
+        newLesson = {
+          id: `${previewBundle.id}-reroll-random-${Date.now()}`,
+          title: 'Náhodné psaní',
+          lesson: {
+            id: `${previewBundle.id}-reroll-random-lesson-${Date.now()}`,
+            title: 'Náhodné psaní',
+            mode: 'random',
+            letters: previewBundle.letters.join(''),
+            pageCount: 1,
+            pageLength: Math.min(200, previewBundle.duration * 2),
+            max_comb: 2,
+          },
+          mode: 'random',
+        };
+      }
+    }
+    
+    updatedBundle.lessons[lessonIndex] = newLesson;
+    setPreviewBundle(updatedBundle);
+  };
+
+  const toggleBundleLessonMode = (lessonIndex: number, newMode: string) => {
+    if (!previewBundle) return;
+    
+    const updatedBundle = { ...previewBundle };
+    const currentLesson = updatedBundle.lessons[lessonIndex];
+    
+    let updatedLesson: BundleLesson;
+    
+    if (newMode === 'shooter') {
+      updatedLesson = {
+        ...currentLesson,
+        title: 'Střelba písmen',
+        lesson: {
+          ...currentLesson.lesson,
+          id: `${currentLesson.lesson.id}-shooter`,
+          title: 'Střelba písmen',
+          mode: 'shooter',
+          targetScore: Math.min(100, previewBundle.duration),
+          text: previewBundle.letters.join(''),
+          examples: [`${Math.min(100, previewBundle.duration)} bodů`],
+        },
+        mode: 'shooter',
+      };
+    } else if (newMode === 'infinite') {
+      updatedLesson = {
+        ...currentLesson,
+        title: 'Psaní na čas',
+        lesson: {
+          ...currentLesson.lesson,
+          id: `${currentLesson.lesson.id}-infinite`,
+          title: 'Psaní na čas',
+          mode: 'infinite',
+          infiniteMode: 'standard',
+          infiniteDifficulty: 'medium',
+          infiniteProgressive: false,
+          infiniteDurationSec: Math.min(previewBundle.duration, 120),
+        },
+        mode: 'infinite',
+      };
+    } else {
+      // For standard/random mode, try to keep the original lesson if possible
+      if (currentLesson.lesson.mode === 'standard' || currentLesson.lesson.mode === 'random') {
+        updatedLesson = {
+          ...currentLesson,
+          mode: currentLesson.lesson.mode || 'standard',
+        };
+      } else {
+        // Convert to random mode
+        updatedLesson = {
+          ...currentLesson,
+          title: 'Náhodné psaní',
+          lesson: {
+            ...currentLesson.lesson,
+            id: `${currentLesson.lesson.id}-random`,
+            title: 'Náhodné psaní',
+            mode: 'random',
+            pageCount: 1,
+            pageLength: Math.min(200, previewBundle.duration * 2),
+            max_comb: 2,
+          },
+          mode: 'random',
+        };
+      }
+    }
+    
+    updatedBundle.lessons[lessonIndex] = updatedLesson;
+    setPreviewBundle(updatedBundle);
+  };
+
   const startPracticeGame = () => {
     if (selectedMode === 'infinite') {
       const categoryLetters = (selectedLessonCategory?.subLessons || [])
@@ -706,17 +860,21 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (screen !== 'evaluation' || !nextLesson) return;
+    if (screen !== 'evaluation' || (!nextLesson && !currentBundle)) return;
 
     const handleEvaluationSpace = (event: KeyboardEvent) => {
       if (event.code !== 'Space' && event.key !== ' ') return;
       event.preventDefault();
-      handleNextLesson();
+      if (currentBundle) {
+        handleBundleNextLesson();
+      } else {
+        handleNextLesson();
+      }
     };
 
     window.addEventListener('keydown', handleEvaluationSpace);
     return () => window.removeEventListener('keydown', handleEvaluationSpace);
-  }, [handleNextLesson, nextLesson, screen]);
+  }, [handleNextLesson, handleBundleNextLesson, nextLesson, screen, currentBundle]);
 
   const handleCancel = () => {
     setScreen('menu');
@@ -740,6 +898,14 @@ export default function App() {
       onCancel: handleCancel,
       setIsWriting: setIsWriting,
     };
+    
+    // Calculate cumulative mistakes for bundle difficulty scaling
+    if (currentBundle && currentBundle.lessons[currentBundleIndex]?.mode === 'shooter') {
+      const bundleMistakes = currentBundle.lessons
+        .slice(0, currentBundleIndex)
+        .reduce((sum, lesson) => sum + (lesson.stats?.errors || 0), 0);
+      (props as any).bundleMistakes = bundleMistakes;
+    }
     
     if (selectedMode === 'infinite') {
       if (selectedLesson.infiniteMode === 'shooter') {
@@ -1475,36 +1641,88 @@ export default function App() {
 
                   <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-[0_25px_60px_-50px_rgba(15,23,42,0.8)] dark:border-slate-700 dark:bg-slate-800">
                     <div className="space-y-4">
+                      <h3 className="text-lg font-black text-slate-900 dark:text-slate-100">2. Typy cvičení</h3>
+                      <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                        Vyber typy cvičení, které chceš v balíčku mít.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={dailyPracticeSettings.includeShooter}
+                            onChange={(e) => setDailyPracticeSettings(prev => ({ ...prev, includeShooter: e.target.checked }))}
+                            className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500 dark:focus:ring-emerald-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600"
+                          />
+                          <div>
+                            <div className="font-bold text-slate-800 dark:text-slate-100">Střelba písmen</div>
+                            <div className="text-sm text-slate-500 dark:text-slate-400">Rychlá hra s padajícími písmeny</div>
+                          </div>
+                        </label>
+                        <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={dailyPracticeSettings.includeTyping}
+                            onChange={(e) => setDailyPracticeSettings(prev => ({ ...prev, includeTyping: e.target.checked }))}
+                            className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500 dark:focus:ring-emerald-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600"
+                          />
+                          <div>
+                            <div className="font-bold text-slate-800 dark:text-slate-100">Psaní na čas</div>
+                            <div className="text-sm text-slate-500 dark:text-slate-400">Psaní textu pod časovým tlakem</div>
+                          </div>
+                        </label>
+                        <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/50 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={dailyPracticeSettings.includeTree}
+                            onChange={(e) => setDailyPracticeSettings(prev => ({ ...prev, includeTree: e.target.checked }))}
+                            className="w-4 h-4 text-emerald-600 bg-slate-100 border-slate-300 rounded focus:ring-emerald-500 dark:focus:ring-emerald-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600"
+                          />
+                          <div>
+                            <div className="font-bold text-slate-800 dark:text-slate-100">Lekce ze stromu</div>
+                            <div className="text-sm text-slate-500 dark:text-slate-400">Strukturované lekce z učebního stromu</div>
+                          </div>
+                        </label>
+                      </div>
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
+                        {!dailyPracticeSettings.includeShooter && !dailyPracticeSettings.includeTyping && !dailyPracticeSettings.includeTree
+                          ? 'Vyber aspoň jeden typ cvičení.'
+                          : `Vybrané typy: ${[
+                              dailyPracticeSettings.includeShooter ? 'střelba' : '',
+                              dailyPracticeSettings.includeTyping ? 'psaní na čas' : '',
+                              dailyPracticeSettings.includeTree ? 'lekce ze stromu' : ''
+                            ].filter(Boolean).join(', ')}`}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-[0_25px_60px_-50px_rgba(15,23,42,0.8)] dark:border-slate-700 dark:bg-slate-800">
+                    <div className="space-y-4">
                       <h3 className="text-xl font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
                         <Clock className="w-5 h-5 text-emerald-500" />
-                        2. Nastav délku
+                        3. Nastav délku
                       </h3>
-                      <div className="space-y-2 max-h-80 overflow-y-auto">
-                        {[30, 60, 90, 120, 150, 180, 210, 240, 270, 300].map((time) => (
-                          <button
-                            key={time}
-                            onClick={() => setDailyPracticeSettings(prev => ({ ...prev, duration: time }))}
-                            className={`w-full rounded-xl border-2 p-4 text-left transition-all hover:translate-y-[1px] ${
-                              dailyPracticeSettings.duration === time
-                                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 shadow-md'
-                                : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 hover:bg-white dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-sm'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <div className="font-bold text-slate-800 dark:text-slate-100 text-lg">{formatTime(time)}</div>
-                                <div className="text-sm text-slate-500 dark:text-slate-400">
-                                  {time <= 60 ? '3 cvičení' : time <= 120 ? '4 cvičení' : time <= 180 ? '5 cvičení' : '6 cvičení'}
-                                </div>
-                              </div>
-                              {dailyPracticeSettings.duration === time && (
-                                <div className="rounded-full bg-emerald-500 p-1.5">
-                                  <CheckCircle2 className="w-5 h-5 text-white" />
-                                </div>
-                              )}
+                      <div className="space-y-4">
+                        <div className="px-2">
+                          <input
+                            type="range"
+                            min="30"
+                            max="600"
+                            step="30"
+                            value={dailyPracticeSettings.duration}
+                            onChange={(e) => setDailyPracticeSettings(prev => ({ ...prev, duration: parseInt(e.target.value) }))}
+                            className="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 slider"
+                          />
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium text-slate-500 dark:text-slate-400">30 sec</span>
+                          <div className="text-center">
+                            <div className="text-2xl font-black text-slate-800 dark:text-slate-100">{formatTime(dailyPracticeSettings.duration)}</div>
+                            <div className="text-sm text-slate-500 dark:text-slate-400">
+                              {dailyPracticeSettings.duration <= 60 ? '3 cvičení' : dailyPracticeSettings.duration <= 120 ? '4 cvičení' : dailyPracticeSettings.duration <= 180 ? '5 cvičení' : '6 cvičení'}
                             </div>
-                          </button>
-                        ))}
+                          </div>
+                          <span className="text-sm font-medium text-slate-500 dark:text-slate-400">10 min</span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1513,16 +1731,16 @@ export default function App() {
                     <div className="text-center space-y-4">
                       <h3 className="text-xl font-black text-white flex items-center justify-center gap-2">
                         <Play className="w-6 h-6" />
-                        3. Spusť trénink
+                        4. Spusť trénink
                       </h3>
                       <p className="text-white/90 text-base font-medium">
-                        {dailyPracticeSettings.letters.length > 0
+                        {dailyPracticeSettings.letters.length > 0 && (dailyPracticeSettings.includeShooter || dailyPracticeSettings.includeTyping || dailyPracticeSettings.includeTree)
                           ? `Vygeneruje balíček ${dailyPracticeSettings.duration <= 60 ? '3' : dailyPracticeSettings.duration <= 120 ? '4' : dailyPracticeSettings.duration <= 180 ? '5' : '6'} cvičení pro procvičení písmen ${dailyPracticeSettings.letters.join(', ')} na ${formatTime(dailyPracticeSettings.duration).toLowerCase()}.`
-                          : 'Bez vybraných písmen balíček nevygeneruješ.'}
+                          : 'Vyber písmena a aspoň jeden typ cvičení.'}
                       </p>
                       <button
                         onClick={startDailyPractice}
-                        disabled={dailyPracticeSettings.letters.length === 0}
+                        disabled={dailyPracticeSettings.letters.length === 0 || (!dailyPracticeSettings.includeShooter && !dailyPracticeSettings.includeTyping && !dailyPracticeSettings.includeTree)}
                         className="inline-flex items-center justify-center gap-3 rounded-[1.25rem] bg-white px-8 py-4 text-lg font-black text-emerald-600 border-b-[6px] border-white/30 transition-all hover:bg-slate-50 hover:translate-y-[2px] hover:border-b-[4px] active:translate-y-[6px] active:border-b-0 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
                       >
                         <Play className="h-6 w-6 fill-current" />
@@ -1545,17 +1763,58 @@ export default function App() {
                         
                         <div className="space-y-3">
                           {previewBundle.lessons.map((lesson, index) => (
-                            <div key={lesson.id} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-600">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold">
-                                  {index + 1}
-                                </div>
-                                <div>
-                                  <div className="font-bold text-slate-800 dark:text-slate-100">{lesson.title}</div>
-                                  <div className="text-sm text-slate-500 dark:text-slate-400">
-                                    {lesson.mode === 'shooter' ? 'Střelba písmen' : lesson.mode === 'infinite' ? 'Psaní na čas' : 'Psaní textu'}
+                            <div key={lesson.id} className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-600">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-bold">
+                                    {index + 1}
+                                  </div>
+                                  <div>
+                                    <div className="font-bold text-slate-800 dark:text-slate-100">{lesson.title}</div>
+                                    <div className="text-sm text-slate-500 dark:text-slate-400">
+                                      {lesson.mode === 'shooter' ? 'Střelba písmen' : lesson.mode === 'infinite' ? 'Psaní na čas' : 'Psaní textu'}
+                                    </div>
                                   </div>
                                 </div>
+                                <button
+                                  onClick={() => rerollBundleLesson(index)}
+                                  className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700"
+                                  title="Vyměnit lekci"
+                                >
+                                  <RotateCcw className="w-5 h-5" />
+                                </button>
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => toggleBundleLessonMode(index, 'shooter')}
+                                  className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                                    lesson.mode === 'shooter'
+                                      ? 'bg-blue-500 text-white'
+                                      : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                                  }`}
+                                >
+                                  Střelba
+                                </button>
+                                <button
+                                  onClick={() => toggleBundleLessonMode(index, 'infinite')}
+                                  className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                                    lesson.mode === 'infinite'
+                                      ? 'bg-green-500 text-white'
+                                      : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                                  }`}
+                                >
+                                  Na čas
+                                </button>
+                                <button
+                                  onClick={() => toggleBundleLessonMode(index, 'standard')}
+                                  className={`px-3 py-1 text-xs rounded-full transition-colors ${
+                                    lesson.mode === 'standard' || lesson.mode === 'random'
+                                      ? 'bg-purple-500 text-white'
+                                      : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                                  }`}
+                                >
+                                  Text
+                                </button>
                               </div>
                             </div>
                           ))}
