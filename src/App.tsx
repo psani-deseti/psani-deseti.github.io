@@ -8,6 +8,8 @@ import { GameWordShooter } from './components/GameWordShooter';
 import { GameChallenge } from './components/GameChallenge';
 import { PracticeHub, PracticeSettings } from './components/PracticeHub';
 import { Keyboard } from './components/Keyboard';
+import ActivityCalendar from './components/ActivityCalendar';
+import { MascotBuddy } from './components/MascotBuddy';
 import { VerticalTimer } from './components/VerticalTimer';
 import { Settings as SettingsIcon, Play, Target, Clock, Trophy, ArrowLeft, RotateCcw, Map as MapIcon, Dumbbell, Star, X, CheckCircle2, HelpCircle, ArrowRight, Keyboard as KeyboardIcon, TrendingUp } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -33,6 +35,14 @@ type PracticeProgressSummary = {
   lastResult: GameStats;
 };
 
+type DailyPracticeSettings = {
+  letters: string[];
+  duration: number;
+  includeShooter: boolean;
+  includeTyping: boolean;
+  includeTree: boolean;
+};
+
 const EMPTY_LESSON_STATS = {
   stars: 0,
   attempts: 0,
@@ -54,6 +64,22 @@ const formatTime = (seconds: number): string => {
     const secondText = remainingSeconds === 1 ? '1 sekunda' : `${remainingSeconds} sekund`;
     return `${minuteText} a ${secondText}`;
   }
+};
+
+const hedgehogMessages = [
+  'Ahoj! Jsem Ježurka a hlídám ti každý napsaný den. Pojďme na to spolu!',
+  'Jsi blízko dalšího pokroku — stačí pár minut a už jsi zase o krok dál.',
+  'Malé kroky každý den = velká zlepšení. Ježurka ti fandí!',
+  'Psaní je dovednost. Dneska jsi ji posunul o další minuty.',
+  'Když se zase chceš flákat, pamatuj: Ježurka ví, že ty to zvládneš.',
+  'Super práce! Každý den s více minutami je dobrý den.',
+];
+
+const normalizePracticeLetters = (letters: string[] | string) => {
+  const normalized = (typeof letters === 'string' ? letters.split('') : letters)
+    .map(letter => letter.toLowerCase().trim())
+    .filter(Boolean);
+  return Array.from(new Set(normalized)).sort();
 };
 
 const createPracticeKey = (settings: PracticeSettings) => {
@@ -111,7 +137,7 @@ const createPracticeLesson = (settings: PracticeSettings): { lesson: SubLesson; 
   };
 };
 
-const generatePracticeBundle = (letters: string[], duration: number, settings?: typeof dailyPracticeSettings): PracticeBundle => {
+const generatePracticeBundle = (letters: string[], duration: number, settings?: DailyPracticeSettings): PracticeBundle => {
   const bundleId = `bundle-${Date.now()}`;
   const bundleLessons: BundleLesson[] = [];
   const availableLessons = categories.flatMap(cat => cat.subLessons.filter(lesson => 
@@ -292,11 +318,16 @@ export default function App() {
   // Bundle states
   const [currentBundle, setCurrentBundle] = useState<PracticeBundle | null>(null);
   const [currentBundleIndex, setCurrentBundleIndex] = useState(0);
+  const [previewBundle, setPreviewBundle] = useState<PracticeBundle | null>(null);
   const [bundleHistory, setBundleHistory] = useState<PracticeBundle[]>(() => {
     const saved = localStorage.getItem('ninjaBundleHistory');
     return saved ? JSON.parse(saved) : [];
   });
-  const [previewBundle, setPreviewBundle] = useState<PracticeBundle | null>(null);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [writingActivity, setWritingActivity] = useState<Record<string, { minutes: number; wrote: boolean }>>(() => {
+    const saved = localStorage.getItem('ninjaWritingActivity');
+    return saved ? JSON.parse(saved) : {};
+  });
 
   const learnedLetters = React.useMemo(() => {
     const letters = new Set<string>();
@@ -352,6 +383,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('ninjaPracticeProgress', JSON.stringify(practiceProgress));
   }, [practiceProgress]);
+
+  useEffect(() => {
+    localStorage.setItem('ninjaWritingActivity', JSON.stringify(writingActivity));
+  }, [writingActivity]);
 
   useEffect(() => {
     localStorage.setItem('ninjaLessonStats', JSON.stringify(lessonStats));
@@ -414,6 +449,19 @@ export default function App() {
         };
       });
     }
+
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const minutesPracticed = Math.max(1, Math.ceil(gameStats.timeMs / 60000));
+    setWritingActivity(prev => {
+      const previous = prev[todayKey] ?? { minutes: 0, wrote: false };
+      return {
+        ...prev,
+        [todayKey]: {
+          minutes: previous.minutes + minutesPracticed,
+          wrote: true,
+        },
+      };
+    });
 
     if (!isCustomPractice && selectedLesson.mode === 'infinite') {
       const originalLessonId = selectedLesson.id.toString().startsWith('infinite-')
@@ -2625,6 +2673,41 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      
+      {/* Calendar Modal */}
+      <AnimatePresence>
+        {showCalendarModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowCalendarModal(false)}
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="w-full max-w-5xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <ActivityCalendar 
+                activityData={writingActivity} 
+                isModal={true} 
+                onClose={() => setShowCalendarModal(false)} 
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      <MascotBuddy 
+        messages={hedgehogMessages} 
+        onOpenCalendar={() => setShowCalendarModal(true)}
+        accuracy={stats?.accuracy}
+        screen={screen}
+        isWriting={isWriting}
+      />
     </div>
   );
 }
