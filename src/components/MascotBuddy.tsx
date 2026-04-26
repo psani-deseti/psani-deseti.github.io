@@ -15,7 +15,7 @@ interface MascotBuddyProps {
   isWriting: boolean;
 }
 
-type MascotState = 'idle' | 'bored1' | 'bored2' | 'bored3' | 'click' | 'speaking' | 'sleeping' | 'happy' | 'motivational';
+type MascotState = 'idle' | 'bored1' | 'bored2' | 'bored3' | 'click' | 'speaking' | 'sleeping' | 'happy' | 'motivational' | 'tired';
 
 const conversationOptions: ConversationOption[] = [
     {
@@ -205,11 +205,16 @@ export const MascotBuddy = ({ messages, onOpenCalendar, accuracy, screen, isWrit
   const [displayedText, setDisplayedText] = useState<string>('');
   const [currentConversationOptions, setCurrentConversationOptions] = useState<ConversationOption[]>([]);
   const [talkingFrame, setTalkingFrame] = useState(0);
+  const [conversationCount, setConversationCount] = useState(0);
+  const [isTired, setIsTired] = useState(false);
+  const [tiredCooldownEnd, setTiredCooldownEnd] = useState<number | null>(null);
   const boredTimerRef = useRef<number | null>(null);
   const sleepTimerRef = useRef<number | null>(null);
   const talkingTimerRef = useRef<number | null>(null);
   const specialCycleRef = useRef<number | null>(null);
   const textTimerRef = useRef<number | null>(null);
+  const openTimerRef = useRef<number | null>(null);
+  const cooldownTimerRef = useRef<number | null>(null);
 
   const currentMessage = useMemo(() => messages[currentMessageIndex] ?? '', [messages, currentMessageIndex]);
 
@@ -349,11 +354,43 @@ export const MascotBuddy = ({ messages, onOpenCalendar, accuracy, screen, isWrit
       case 'sleeping': return '/images/sleeping.png';
       case 'happy': return talkingFrame % 2 === 0 ? '/images/idle.png' : '/images/happy.png';
       case 'motivational': return talkingFrame % 2 === 0 ? '/images/idle.png' : '/images/motivational.png';
+      case 'tired': return '/images/sleeping.png';
       default: return '/images/idle.png';
     }
   };
 
+  // Handle tired state cooldown
+  useEffect(() => {
+    if (isTired && tiredCooldownEnd) {
+      const checkCooldown = () => {
+        const now = Date.now();
+        if (now >= tiredCooldownEnd) {
+          setIsTired(false);
+          setTiredCooldownEnd(null);
+          setConversationCount(0);
+        }
+      };
+
+      if (cooldownTimerRef.current) {
+        clearInterval(cooldownTimerRef.current);
+      }
+      cooldownTimerRef.current = window.setInterval(checkCooldown, 100);
+
+      return () => {
+        if (cooldownTimerRef.current) {
+          clearInterval(cooldownTimerRef.current);
+          cooldownTimerRef.current = null;
+        }
+      };
+    }
+  }, [isTired, tiredCooldownEnd]);
+
   const handleToggle = () => {
+    // Don't open if tired and in cooldown
+    if (isTired && tiredCooldownEnd && Date.now() < tiredCooldownEnd) {
+      return;
+    }
+
     setOpen((prev: boolean) => !prev);
     if (!open) {
       // Wake up if sleeping
@@ -370,11 +407,30 @@ export const MascotBuddy = ({ messages, onOpenCalendar, accuracy, screen, isWrit
       setDisplayedText('');
       // Generate new random conversation options
       setCurrentConversationOptions(selectRandomConversationOptions());
+
+      // Start 30-second timer
+      if (openTimerRef.current) {
+        clearTimeout(openTimerRef.current);
+      }
+      openTimerRef.current = window.setTimeout(() => {
+        // Show tired message after 30 seconds
+        setConversationResponse('UZ ZADNY POVIDANI, bez psat ted, ok?');
+        setState('tired');
+        setShowConversation(true);
+        setIsTired(true);
+        setTiredCooldownEnd(Date.now() + 60000); // 60 second cooldown
+        setConversationCount(0);
+      }, 30000); // 30 seconds
     } else {
       setState('idle');
       setShowConversation(false);
       setConversationResponse('');
       setDisplayedText('');
+      // Clear the 30-second timer when closing
+      if (openTimerRef.current) {
+        clearTimeout(openTimerRef.current);
+        openTimerRef.current = null;
+      }
     }
   };
 
@@ -383,11 +439,31 @@ export const MascotBuddy = ({ messages, onOpenCalendar, accuracy, screen, isWrit
   };
 
   const handleConversationOption = (option: ConversationOption) => {
+    // Don't respond if tired
+    if (isTired && tiredCooldownEnd && Date.now() < tiredCooldownEnd) {
+      return;
+    }
+
     const randomResponse = option.responses.length > 0
       ? option.responses[Math.floor(Math.random() * option.responses.length)]
       : '';
     setConversationResponse(randomResponse || '');
     setState('speaking');
+
+    // Increment conversation count and check if reached 3
+    const newCount = conversationCount + 1;
+    setConversationCount(newCount);
+
+    if (newCount >= 3) {
+      // After this response finishes, show tired message
+      setTimeout(() => {
+        setConversationResponse('UZ ZADNY POVIDANI, bez psat ted, ok?');
+        setState('tired');
+        setIsTired(true);
+        setTiredCooldownEnd(Date.now() + 60000); // 60 second cooldown
+        setConversationCount(0);
+      }, randomResponse.length * 50 + 1000); // Wait for typewriter effect + 1 second
+    }
   };
 
   return (
@@ -434,7 +510,8 @@ export const MascotBuddy = ({ messages, onOpenCalendar, accuracy, screen, isWrit
                     <button
                       key={index}
                       onClick={() => handleConversationOption(option)}
-                      className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-3 text-sm font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                      disabled={isTired && tiredCooldownEnd && Date.now() < tiredCooldownEnd}
+                      className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-3 text-sm font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {option.text}
                     </button>
@@ -474,14 +551,24 @@ export const MascotBuddy = ({ messages, onOpenCalendar, accuracy, screen, isWrit
       )}
 
       <div className="relative">
+        {isTired && tiredCooldownEnd && Date.now() < tiredCooldownEnd && (
+          <div className="absolute bottom-full right-0 mb-2 bg-slate-500 text-white text-xs font-bold px-3 py-2 rounded-lg whitespace-nowrap shadow-lg">
+            Jsem upovídaný, piš teď, ok?
+          </div>
+        )}
         <img
           src={getImageSrc()}
           className="shadow-lg object-contain"
           onClick={handleToggle}
-          style={{ cursor: 'pointer', width: 108.8, height: 145.5 }}
+          style={{ 
+            cursor: (isTired && tiredCooldownEnd && Date.now() < tiredCooldownEnd) ? 'not-allowed' : 'pointer', 
+            width: 108.8, 
+            height: 145.5,
+            opacity: (isTired && tiredCooldownEnd && Date.now() < tiredCooldownEnd) ? 0.6 : 1
+          }}
           alt="Ježurka"
         />
-        {!open && (
+        {!open && !isTired && (
           <div className="absolute -top-1 -right-1 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
             ?
           </div>
